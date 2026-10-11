@@ -12,6 +12,7 @@ const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const directory = await mkdtemp(join(tmpdir(), "campus-board-ui-"));
 const {env, database} = await createEnvironment(directory, "isolated-ui-test");
 database.prepare("INSERT INTO settings(key,value) VALUES ('read_release',?)").run(RELEASE.version);
+database.prepare("INSERT INTO settings(key,value) VALUES ('daily_summary_seen',?)").run(new Date(Date.now()+8*3600000).toISOString().slice(0,10));
 const server = createServer(async (req, res) => {
   const request = new Request(`http://${req.headers.host}${req.url}`, {method: req.method, headers: req.headers,
     ...(!["GET", "HEAD"].includes(req.method) ? {body: req, duplex: "half"} : {})});
@@ -97,7 +98,7 @@ try {
   await page.waitForFunction(()=>axisItems.some(t=>t.title==='第一张照片'));
   assert.equal(await page.evaluate(()=>axisItems.filter(t=>t.axis_id===axes[0].id).sort(chronological)[0].title),'第一张照片');
   await page.locator('.axis-head').first().click();assert.equal(await page.locator('.axis-member').count(),3);
-  await page.locator('.axis-member').first().getByRole('button',{name:'离轴'}).click();await page.waitForFunction(()=>document.querySelectorAll('.axis-member').length===2);
+  await page.locator('.axis-member').first().getByRole('button',{name:'移出轴线'}).click();await page.waitForFunction(()=>document.querySelectorAll('.axis-member').length===2);
   assert.equal(await page.evaluate(()=>tasks.some(t=>t.title==='第一张照片' && !t.axis_id)),true);
   await page.getByRole('button',{name:'关闭轴线',exact:true}).click();
   // An unassigned card must not inherit the last axis used for creation.

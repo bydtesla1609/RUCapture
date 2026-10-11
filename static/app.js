@@ -552,7 +552,7 @@ function renderTimetable(courses) {
     if(![...slots.values()].some(slot=>start<slot.end && end>slot.start))slots.set(`${start}-${end}`,{start,end,period:task.details?.period || "",label:""});
   }
   const ordered=[...slots.values()].sort((a,b)=>a.start.localeCompare(b.start));
-  if(!ordered.length) {panel.append(element("p","尚未导入课表，请在“来源与同步”同步课表与考试。","day-empty"));return;}
+  if(!ordered.length) {panel.append(element("p","还没有课表。到“来源与同步”添加课表网站，或手动添加课程。","day-empty"));return;}
   const groups=new Map();
   for(const task of visible) {
     const weekday=new Date(`${localInput(task.starts_at).slice(0,10)}T00:00:00Z`).getUTCDay() || 7,start=localInput(task.starts_at).slice(11),end=localInput(task.ends_at).slice(11);
@@ -593,7 +593,7 @@ function renderTimetable(courses) {
   grid.append(body);scroll.append(grid);panel.append(scroll,element("p","左右滑动查看完整课表 · 点击“查看教学大纲”进入教务系统","timetable-hint"));
 }
 function emptySchedule(label,category,canAdd) {
-  const empty=element("div",null,"day-empty");empty.append(element("p",`暂无${label}的${category}`));
+  const empty=element("div",null,"day-empty");empty.append(element("p",`还没有${label}的${category}`));
   if(canAdd){const add=element("button",`＋ 添加${category}`,"text-button empty-add");add.type="button";add.onclick=()=>{newTaskAxis=null;newTaskCategory=category;openTask();};empty.append(add);}
   return empty;
 }
@@ -622,7 +622,6 @@ function calendarDates(task) {
   return [localInput(task.starts_at || task.ends_at).slice(0,10),localInput(task.ends_at || task.starts_at).slice(0,10)];
 }
 function onCalendarDay(task,day) {
-  if(task.category==="作业" && task.status==="done") return false;
   const [start,end]=calendarDates(task);
   return day ? !!start && start<=day && day<=end : !start;
 }
@@ -674,7 +673,7 @@ function renderCalendar() {
   const todayKey=localInput(new Date()).slice(0,10);
   for(let i=0;i<cells;i++) {
     const date=new Date(Date.UTC(year,month-1,1-offset+i)),key=date.toISOString().slice(0,10);
-    const matching=visible.filter(task=>onCalendarDay(task,key)).sort((a,b)=>calendarTypeOrder(a,b) || (calendarEventTime(a)||"9999").localeCompare(calendarEventTime(b)||"9999") || a.id.localeCompare(b.id));
+    const matching=visible.filter(task=>onCalendarDay(task,key)).sort((a,b)=>Number(a.status==="done")-Number(b.status==="done") || calendarTypeOrder(a,b) || (calendarEventTime(a)||"9999").localeCompare(calendarEventTime(b)||"9999") || a.id.localeCompare(b.id));
     const day=element("button",null,"calendar-day"+(key.slice(0,7)!==calendarMonth?" outside":"")+(key===selectedDay?" selected":""));
     day.dataset.date=key;day.setAttribute("aria-label",`${key}，${matching.length} 项安排`);
     day.setAttribute("aria-pressed",String(key===selectedDay));day.setAttribute("aria-controls","day-list");
@@ -682,7 +681,7 @@ function renderCalendar() {
     const dateLine=element("span",null,"calendar-date-line"),holiday=calendarHoliday(key);dateLine.append(element("span",String(date.getUTCDate()),"day-number"));
     if(holiday){dateLine.append(element("span",holiday,"calendar-holiday"));day.setAttribute("aria-label",`${key}，${holiday}，${matching.length} 项安排`);}day.append(dateLine);
     for(const task of matching.slice(0,2)) {
-      const title=element("span",task.title,`day-task cat-${CATEGORIES.indexOf(task.category)}`+(task.status==="done"?" is-done":""));title.title=task.title;day.append(title);
+      const title=element("span",task.title,`day-task cat-${CATEGORIES.indexOf(task.category)}`+(task.status==="done"?" is-done":""));title.title=task.title+(task.status==="done"?(task.category==="记录"?"（已完善）":"（已完成）"):"");day.append(title);
     }
     if(matching.length>2)day.append(element("span",`+${matching.length-2} 项`,"day-more"));
     day.onclick=()=>{
@@ -731,7 +730,7 @@ function renderArchive() {
     remove.setAttribute("aria-label",`删除归档：${task.title}`);remove.onclick=()=>confirmCardDeletion(task);
     const restore=element("button","恢复","text-button");restore.setAttribute("aria-label",`恢复归档：${task.title}`);restore.onclick=()=>archiveTask(task,false);actions.append(view,restore,remove);row.append(info,actions);return row;
   }));
-  if(!archiveItems.length) $("archive-list").append(element("p","此板块暂无归档任务。","archive-empty"));
+  if(!archiveItems.length) $("archive-list").append(element("p","这里还没有归档卡片。","archive-empty"));
   $("archive-more").hidden=archiveItems.length>=archiveTotal;
 }
 async function loadArchive(more=false) {
@@ -834,7 +833,7 @@ function updateSyncControls() {
   $("collector-scan").disabled=syncing || !(cloudState?.enabled || (connected && collectorState.enabled));
   $("collector-scan").textContent=syncing?"正在同步…":"一键同步";
   $("cloud-authorize").disabled=!connected || !cloudState?.available;
-  $("cloud-authorize").textContent=syncStepStates()[0]?"载入云端同步":"先更新扩展至 v1.9.5";
+  $("cloud-authorize").textContent=syncStepStates()[0]?"打开云端授权":"先更新扩展至 v1.9.5";
   if(!connected){$("cloud-panel").replaceChildren();$("cloud-authorize").hidden=false;}
   $("cloud-revoke").hidden=!cloudState?.enabled;
   $("cloud-revoke").disabled=syncing || !cloudState?.enabled;
@@ -891,7 +890,7 @@ async function saveWebsiteLinks(urls,submitted=null) {
   try {
     const data=await api("/api/source-links","PUT",{urls});sourceLinksState=data.links;closeWebsiteInput();renderSources();
     const added=submitted?data.links.find(link=>link.url===new URL(submitted).href):null;
-    $("source-links-result").textContent=added?.generic?"链接已保存，首次请打开识别设置并确认预览。":"网站配置已保存。";
+    $("source-links-result").textContent=added?.generic?"链接已保存。请打开“识别设置”，核对要导入的内容。":"网站配置已保存。";
     if(added?.generic){await refresh();if(collectorState?.connected){try{await setupGeneric(added);}catch(error){$("source-links-result").textContent=error.message;}}return;}
     if(added?.source && collectorState?.connected && collectorState.enabled) {
       try {requireSelectiveSync(added.source);await collectorCommand(added.source==="ruc_courses"?"academic-scan":"scan",{source:added.source});$("source-links-result").textContent="已配置，正在读取网站内容。";}
@@ -974,7 +973,7 @@ async function checkCloud(snapshot) {
     $("cloud-grant-state").textContent=!cloudState.available?"暂不可用，可跳过此步":cloudState.enabled?`已开启 · 每 ${cloudState.interval_minutes || 60} 分钟更新`:"尚未开启";
     $("sync-mode-note").textContent="登录过期的网站，可点击下方“重新登录”。";
     updateSyncControls();renderSources();maybeLoginReminder();
-  }catch(error){if(session!==syncSession || sequence!==cloudCheckSequence)return;$("cloud-status").textContent=error.message;$("cloud-grant-state").textContent="暂时无法读取授权状态，请重新打开此清单重试。";}
+  }catch(error){if(session!==syncSession || sequence!==cloudCheckSequence)return;$("cloud-status").textContent=error.message;$("cloud-grant-state").textContent="未能读取授权状态，请关闭后重新打开“来源与同步”。";}
 }
 function needsLogin(source) {
   const state=cloudState?.sources?.[source.id];
@@ -1073,7 +1072,7 @@ function openTask(task = null) {
   $("task-title").value = task?.title || "";
   $("task-location").value = task?.location || "";
   $("task-content").value=taskContent(task);
-  $("task-content").placeholder={作业:"记录作业要求、思路或需要注意的事项",课程:"记录课程备忘、学习重点或需要携带的资料",考试:"记录考试范围、复习提醒或需要携带的物品",活动:"记录活动议程、举办人、报名信息或其他备忘",会议:"记录会议议程、主持人、讨论要点或会前准备",记录:"今天做了什么，有什么感受？"}[taskCategory];
+  $("task-content").placeholder={作业:"要做哪几题？有什么要求，或卡住的地方？",课程:"这节课要准备什么？有哪些想记下的重点？",考试:"考哪些内容？还有什么没复习，什么东西要带？",活动:"几点集合、在哪里碰面？还有什么要提前准备？",会议:"这次要讨论什么？会前需要准备哪些材料？",记录:"今天做了什么、想到了什么？随手写下来就好。"}[taskCategory];
   $("homework-status").hidden=taskCategory!=="作业";$("done-field").hidden=["作业","课程"].includes(taskCategory);$("done-label").textContent=taskCategory==="记录"?"已完善":"已完成";$("task-done").checked=task?.status==="done";
   $("schedule-fields").hidden=!["课程","考试"].includes(taskCategory);
   $("schedule-person-label").hidden=$("schedule-person").hidden=taskCategory!=="课程";
@@ -1084,12 +1083,12 @@ function openTask(task = null) {
   draftTodos = structuredClone(task?.todos || []);
   draftAttachments = structuredClone(task?.attachments || []); renderAttachments(); $("upload-state").textContent="";
   $("task-links").replaceChildren(); for (const link of task?.links || []) addLinkRow(link);
-  if (!(task?.links || []).length) $("task-links").append(element("p", "可添加课程资料、会议或文档链接", "resource-empty"));
+  if (!(task?.links || []).length) $("task-links").append(element("p", "课程资料、会议地址、在线文档，都可以把链接放在这里。", "resource-empty"));
   $("task-source").hidden=!task?.source_url; $("task-source").replaceChildren();
   if(task){const link=taskSourceLink(task);if(link)$("task-source").append(link);}
   $("task-todos").replaceChildren(checklist(draftTodos, async todos => { draftTodos = todos; }, true));
   $("status").value = task?.status || "todo";enhanceSelect($("status"));
-  $("task-completed").hidden=["课程","记录"].includes(taskCategory) || !task?.completed_at; $("task-completed").textContent=task?.completed_at ? `完成时间 · ${formatTime(task.completed_at,true)}（再次从未完成状态更改为已完成后会重新统计时间。）` : "";
+  $("task-completed").hidden=["课程","记录"].includes(taskCategory) || !task?.completed_at; $("task-completed").textContent=task?.completed_at ? `完成时间 · ${formatTime(task.completed_at,true)}（取消勾选后再完成，会按新的完成时间记录。）` : "";
   $("due-at").value = localInput(task?.due_at); $("starts-at").value = localInput(task?.starts_at); $("ends-at").value = localInput(task?.ends_at);
   toggleDates(); $("task-dialog").showModal();
 }
@@ -1156,23 +1155,23 @@ $("confirm-delete").onclick = async () => {
   try {
     await api(`/api/tasks/${target.id}`, "DELETE", {revision: target.revision});$("delete-dialog").close();
     if(editing?.id===target.id){$("task-dialog").close();editing=null;}
-    notice("任务已删除");await refresh();if($("archive-dialog").open)await loadArchive();if($("axis-dialog").open)renderAxisMembers();
+    notice("卡片已删除");await refresh();if($("archive-dialog").open)await loadArchive();if($("axis-dialog").open)renderAxisMembers();
   }
   catch (error) { notice(error.message); }
   finally { $("confirm-delete").disabled = false; }
 };
 const demoSteps=[
-  {category:"全部",view:"calendar",target:"#board",title:"日历视图：按日期查看安排",text:"选择日期，沿时间轴查看当天的卡片；月份旁边可以筛选类型。节日会标在日期旁，点击卡片即可编辑。"},
-  {category:"全部",view:"axes",target:"#board",title:"轴线视图：串起目标与记录",text:"添加轴线，把卡片按时间串在一起。点击节点编辑，拖动调整位置，完成后保存布局；末尾的加号可以添加卡片。"},
-  {category:"全部",view:"quadrants",target:"#board",title:"象限：想清楚先做哪件事",text:"把待安排卡片拖进象限，按紧急性与重要性分清先后。空白处可拖动画布，滚轮或双指缩放；边缘箭头会带你找到画面外的卡片。"},
-  {target:"#focus-button",title:"专注：给眼前这件事一段时间",text:"在左下角设置时长，选好目标卡片，再开始专注。信息随时可编辑，计时可暂停和继续；结束后由你决定是否留下记录，也可导出到记录板块。"},
-  {category:"作业",target:"#board",title:"作业：进度一目了然",text:"待开始、进行中、已完成分栏展示。卡片上的待办事项可以增删、修改和拖动排序；其他详情通过“编辑”修改。"},
-  {category:"记录",target:"#board",title:"记录",text:"记下做过的事和当时的感受。记录也会出现在总览。"},
-  {target:"#add-task",title:"随时补充自己的安排",text:"填写标题和时间，再按需要补充地点、内容、待办、附件和链接。"},
-  {target:"#sources-button",title:"网站配置在这里",text:"点击侧栏的“来源与同步”，安装并连接同步扩展，就可以接入自己的校园网站。下一步带你查看配置位置。"},
-  {target:"#add-source-link",sources:true,title:"一个网站，一条配置",text:"点击“添加网站”，粘贴列表页面的网址并确认。上方五个点显示进度，完成每一步后点击“下一步”继续。"},
-  {target:"#cloud-settings > h3",sources:true,title:"云端同步：电脑关机也能更新",text:"在第 4 步为支持的作业网站开启云端同步，电脑关机后也能更新。课表、考试与仅支持浏览器识别的网页仍需浏览器运行。点击“下一步”后执行同步。"},
-  {target:"#user-menu-toggle",title:"账户菜单：总结与消息",text:"点击头像查看今日总结，回顾从今天零点起完成的事。每天首次打开会展示昨日总结。这里也有消息、归档与账号设置；课程和记录不会自动归档。"}
+  {category:"全部",view:"calendar",target:"#board",title:"日历：看当天的安排",text:"选一天，下面就是当天的卡片。点击卡片编辑；只想看考试或作业，可以用月份旁的筛选。"},
+  {category:"全部",view:"axes",target:"#board",title:"轴线：把零碎的事连起来",text:"一条轴线就是一个目标或合集。比如“期末复习”，可以把相关作业、考试和笔记放在一起，回看自己已经做了哪些准备。点末尾加号添加卡片，点节点编辑。"},
+  {category:"全部",view:"quadrants",target:"#board",title:"象限：先做哪件事",text:"待办太多，不知道先做哪件时，可以在这里摆一摆。越靠右越紧急，越靠上越重要；拖动空白处移动画布，滚轮或双指缩放，边缘箭头指向画面外的卡片。"},
+  {target:"#focus-button",title:"专注：先做眼前这一件",text:"挑一件事，留一段时间专心做。目标卡片可以不选，计时可以暂停，想法随时记下。结束时再决定要不要保存；想长期保留，就导出到记录板块。"},
+  {category:"作业",target:"#board",title:"作业：做到哪一步了",text:"用卡片上的状态切换进度。大作业可以拆成几条待办，做完一条勾一条；“查看原作业”能回到作业网站。"},
+  {category:"记录",target:"#board",title:"记录",text:"不一定是任务，也可以是一段想法、一次尝试，或者今天终于弄懂的一道题。记录会显示在日历里，也能加入轴线；不会自动归档。"},
+  {target:"#add-task",title:"添加卡片",text:"选好类型，填标题和时间。地点、待办、附件和链接按需要补充。"},
+  {target:"#sources-button",title:"连接作业网站",text:"在电脑上安装扩展，连接账号，再添加网站。手机登录同一账号，就能查看同步来的卡片。"},
+  {target:"#add-source-link",sources:true,title:"添加网站",text:"粘贴作业列表、课表或校历页面的网址。需要识别的网页，先核对预览，再确认导入。"},
+  {target:"#cloud-settings > h3",sources:true,title:"云端同步：关机也能更新",text:"为支持的网站授权后，每小时更新一次。课表、考试和其他仅支持浏览器导入的网页仍需电脑浏览器运行。设置好后，到第 5 步点“一键同步”。"},
+  {target:"#user-menu-toggle",title:"今日总结",text:"点击头像，随时查看今天零点以来完成的事。每天第一次打开网站，会先看到昨天的总结；消息、归档和账号设置也在这个菜单里。"}
 ];
 let demoIndex=0,demoOriginal=null,demoFrame=0,demoReveal=false;
 const demoKey=()=>`ruchecklist-demo:${boardAccount}`;
@@ -1237,14 +1236,14 @@ const demoLayout=new ResizeObserver(()=>{
 for(const id of ["guide-install","website-setup","collector-controls","collector-state","cloud-settings","sources-list","sources-dialog"])demoLayout.observe($(id));
 
 function setAuthMode(mode) {
-  $("auth-heading").textContent=mode==="register"?"开启你的空间":mode==="recover"?"找回账号":"欢迎回来";
+  $("auth-heading").textContent=mode==="register"?"注册账号":mode==="recover"?"重设密码":"欢迎回来";
   $("auth-login").className=mode==="login"?"secondary":"text-button";$("auth-register").className=mode==="register"?"secondary":"text-button";
   authMode=mode;$("invite-field").hidden=mode!=="register" || publicRegistration;$("recovery-field").hidden=mode!=="recover";
   $("invite-code").required=mode==="register" && !publicRegistration;$("recovery-code").required=mode==="recover";
   $("password").autocomplete=mode==="login"?"current-password":"new-password";
   $("password-label").textContent=mode==="recover"?"新密码":"密码";
   $("password").placeholder="至少 6 位，含英文和数字";
-  document.querySelector("#login-form button[type=submit]").textContent=mode==="register"?"创建我的账号":mode==="recover"?"重设密码":"登录看板";
+  document.querySelector("#login-form button[type=submit]").textContent=mode==="register"?"创建账号":mode==="recover"?"重设密码":"登录看板";
   $("login-error").textContent="";
 }
 function configureAccount(data) {

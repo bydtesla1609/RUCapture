@@ -12,6 +12,7 @@ const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const directory = await mkdtemp(join(tmpdir(), "campus-board-ui-"));
 const {env, database} = await createEnvironment(directory, "isolated-ui-test");
 database.prepare("INSERT INTO settings(key,value) VALUES ('read_release',?)").run(RELEASE.version);
+database.prepare("INSERT INTO settings(key,value) VALUES ('daily_summary_seen',?)").run(new Date(Date.now()+8*3600000).toISOString().slice(0,10));
 const server = createServer(async (req, res) => {
   const request = new Request(`http://${req.headers.host}${req.url}`, {method: req.method, headers: req.headers,
     ...(!["GET", "HEAD"].includes(req.method) ? {body: req, duplex: "half"} : {})});
@@ -68,7 +69,18 @@ try {
   assert.equal(await page.locator("#messages-dialog").isVisible(),false,"recovery removes reminder on next visit");
   await page.setViewportSize({width:1440,height:1050});
   database.prepare("UPDATE settings SET value='0' WHERE key='cloud_enabled'").run();await page.evaluate(()=>checkCloud());
-  await page.locator("#add-task").click(); await page.locator("#add-menu button").filter({hasText: "活动"}).click();
+  await page.locator("#add-task").click();
+  // Decorative summary cards must never cover any add-menu option, including on phones.
+  for(const effects of ['on','off'])for(const width of [1440,390,320]){
+    await page.evaluate(value=>document.documentElement.dataset.effects=value,effects);
+    await page.setViewportSize({width,height:1050});await page.locator('#add-menu').scrollIntoViewIfNeeded();
+    for(const option of await page.locator('#add-menu button').all()){
+      assert.ok(await option.evaluate(node=>{const r=node.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return hit===node || node.contains(hit);}),`menu option exposed at ${width}px with effects ${effects}`);
+      await option.click({trial:true});
+    }
+  }
+  await page.evaluate(()=>delete document.documentElement.dataset.effects);await page.setViewportSize({width:1440,height:1050});
+  await page.locator("#add-menu button").filter({hasText: "活动"}).click();
   assert.equal(await page.locator("#category").count(), 0);
   assert.equal(await page.locator("#task-title").getAttribute("required"), "");
   await page.locator("#task-title").fill("课程研究 · 读懂一篇论文");
@@ -252,7 +264,7 @@ try {
   await page.waitForFunction(()=>!document.querySelector("article[data-busy]"));
   let completed=database.prepare("SELECT completed_at,due_at,status FROM tasks WHERE id=?").get(homeworkId);
   assert.equal(completed.status,"done");assert.ok(completed.completed_at);assert.equal(completed.due_at,"2026-10-02T15:59:00.000Z");
-  assert.equal(await homework.count(),0);
+  assert.equal(await homework.count(),1,'completed homework stays on its due date');
   assert.equal(await page.locator(".calendar .day-task").filter({hasText:"数据结构"}).count(),0);
   await page.getByRole("button",{name:"今天",exact:true}).click();
   assert.equal(await page.locator(`article[data-task-id="${homeworkId}"]`).count(),0);
@@ -346,7 +358,10 @@ try {
   await page.locator('#task-content').fill('课后复习笔记');await page.locator('#save-task').click();await page.locator('#task-dialog').waitFor({state:'hidden'});
   await courseCard.locator(".edit-task").click();assert.equal(await page.locator('#task-content').inputValue(),'课后复习笔记');await page.locator('#task-dialog .close-dialog').first().click();
   await category(page,"考试").click();assert.equal(await page.locator(".schedule-columns>.column").count(),2);assert.match(await page.locator(".exam-group").first().textContent(),/座位 · 28/);
-  assert.equal(await page.locator("#count-open").evaluate(node=>getComputedStyle(node).color===getComputedStyle(document.body).color),true,"unfinished exams use normal text color");
+  // Plain mode retains the original text color; the optional effects theme uses the module color.
+  await page.evaluate(()=>document.documentElement.dataset.effects='off');
+  assert.equal(await page.locator("#count-open").evaluate(node=>getComputedStyle(node).color===getComputedStyle(document.body).color),true,"unfinished exams use normal text color in plain mode");
+  await page.evaluate(()=>delete document.documentElement.dataset.effects);
   await page.screenshot({animations:"disabled",path:"data/screenshots/exams.png",fullPage:true});
   await phone.evaluate(()=>refresh());
   for(const section of ["记录","考试","会议","活动"]) {

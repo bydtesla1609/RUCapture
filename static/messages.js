@@ -3,56 +3,56 @@ let messageReady=false,startupMessageShown=false,releaseState=null,announcementS
 let chatTarget=null,chatMessages=[],chatMore=false,chatSequence=0,chatBusy=false,chatPending=null,communityUnread=0;
 // Original encouragements; no quotation attribution and no saved summary snapshots.
 const DAILY_ENCOURAGEMENTS=[
-  "把一件事做完，就给心里腾出了一点位置。",
-  "今天的这一小步，也算数。",
-  "不用每一天都很耀眼，走过的路不会白走。",
-  "慢一点也没关系，你有自己的步速。",
-  "把目光从还没做的事上移开一会儿，看看已经走过的路。",
-  "能开始，已经不容易；能回来继续，也很了不起。",
-  "先照顾好自己，再去照顾那些计划。",
-  "暂时没有答案的题，明天也可以接着想。",
-  "一页笔记、一段阅读，都是给未来留下的线索。",
-  "别急着否定今天，你做过的努力不只在这张清单里。",
-  "有时候，认真吃饭、好好睡觉，就是最重要的进展。",
-  "没有人规定，成长一定要轰轰烈烈。",
-  "给自己一点耐心，很多变化正在慢慢发生。",
-  "你不需要和别人的进度条对齐。",
-  "今天认真做过的事，会在某个时刻帮到你。",
-  "把难题拆小一点，也把对自己的要求放温柔一点。",
-  "偶尔停下来，不等于放弃向前。",
-  "能把注意力收回来一次，就是一次练习。",
-  "路还很长，留点力气给沿途的风景。",
-  "做完这一段，记得站起来看看窗外。",
-  "不是所有收获都能立刻打上勾，但它们依然存在。",
-  "你可以有目标，也可以有不赶路的晚上。",
-  "今天遇到的困难，不是对你能力的最终评价。",
-  "一时没做好，不妨碍下一次做得更好。",
-  "把今天收好，明天再翻开新的一页。",
-  "能把模糊的想法写下来，就已经离它近了一点。",
-  "不必一次想清楚整条路，先走到下一盏灯下。",
-  "你认真生活的样子，不需要一张满分答卷来证明。",
-  "完成后的那口气，可以慢慢呼出来。",
-  "今天的自己，值得一句辛苦了。",
-  "把进步看小一点，你会发现它其实常常发生。",
-  "喜欢的事可以慢慢来，值得的人也包括你自己。",
-  "一次练习可能很普通，许多次练习会留下变化。",
-  "不顺利的日子，也可以有一个温柔的结尾。",
-  "允许自己边走边学，没有谁一开始就全都会。",
-  "给努力一点时间，也给生活一点空白。",
-  "从图书馆走回宿舍的路上，记得抬头看看天。",
-  "交掉一份作业，也别忘了给自己一点小小的奖励。",
-  "困住你的那道题，不会定义整个学期。",
-  "能和昨天的自己多懂一点点，就很好。",
-  "清单可以很长，今天只需要走好今天这一段。",
-  "你值得休息，不必先把所有事情都做完。",
-  "在忙碌里给自己留一个能喘气的角落。",
-  "别只记得赶路，也记得你为什么出发。",
-  "小小的坚持，也是认真回答生活的一种方式。",
-  "把注意力放回眼前，一次只做一件事。",
-  "生活不只有截止时间，还有值得期待的下一顿饭。",
-  "一段用心的时间，不会因为结果普通就失去意义。",
-  "今天不够顺利的话，明天还有重新安排的机会。",
-  "此刻能做的已经做了，剩下的慢慢来。"
+  "如果总惦记着还有什么没做，也可以先看看已经做完的这些。",
+  "有些事只是试了一下，还没做成，也值得记一笔。",
+  "清单是拿来帮忙的，不是拿来给自己扣分的。",
+  "那道没想明白的题，先记下卡在哪里，下次从这里接着想。",
+  "课上没听懂的地方，能找人一起聊聊，也是一种办法。",
+  "今天的计划太满了，明天少排一点也没关系。",
+  "别把吃饭和睡觉，都排在“忙完以后”。",
+  "一篇笔记不必写得很漂亮，过几天自己还能看懂就行。",
+  "不想写长篇总结的话，留一句“下次从这里开始”也好。",
+  "小组作业也不用一个人全扛着，有问题就早点说。",
+  "去上了一节课、认真听了一会儿，这些不一定都在清单上。",
+  "记下一个问题，也是在为下次弄懂它做准备。",
+  "从图书馆回宿舍的路上，记得看看天。",
+  "那本一直想读的书，先翻两页也行。",
+  "学累了就去走一走，回来再看，可能会有新思路。",
+  "作业可以拆成几道题，复习也可以先从一小节开始。",
+  "做过的尝试先留下来，之后回看时不用再从头猜。",
+  "如果今天被临时的事打乱了，重新安排就好。",
+  "有空的话，也记一点和作业无关的事吧。",
+  "想起一个不错的点子，可以先记一句，不急着想周全。",
+  "把手机放远一点，先给眼前这件事十分钟试试。",
+  "今天有哪件小事让你开心？也可以把它留下来。",
+  "没必要把每天都过成 ddl 前一晚。",
+  "计划改了不代表白做，之前试过的办法还在。",
+  "不会的题先圈出来，明天问问同学或老师。",
+  "慢一点没关系，不用照着别人的速度过这学期。",
+  "有些东西今天没懂，隔几天再看，可能就通了。",
+  "到饭点了的话，先去吃饭吧。",
+  "偶尔给自己留个没有安排的晚上。",
+  "做完一段之后，可以缓一缓，不用马上接着赶下一件。",
+  "总结不一定要写收获，写“这里没弄懂”也很有用。",
+  "今天没用上的准备，也许下次还用得着，先留着。",
+  "不想动的时候，把第一步写得小一点，看看能不能开始。",
+  "忘记记录也不要紧，想起来的时候再补。",
+  "有些进展很小，比如终于敢去问那个问题。",
+  "给明天的自己留一句提醒，会省下不少重新回忆的时间。",
+  "记下做成的事，也可以记下不想再试的办法。",
+  "赶完作业以后，记得把欠自己的觉补回来。",
+  "今天没勾掉几项，也不代表今天什么都没做。",
+  "找到适合自己的方法，通常得多试几次。",
+  "比起一口气安排整个学期，先想清楚这周也不错。",
+  "如果还有精力，给一直想做的事留十分钟吧。",
+  "喜欢的事不用等到所有作业都做完才开始。",
+  "不用把记录写成报告，写给自己看就好。",
+  "清单里也可以有散步、打球和约朋友吃饭。",
+  "偶尔回头看看以前的笔记，也许会发现当时难住你的事已经会了。",
+  "别人的进度可以参考，自己的节奏也得照顾。",
+  "一时没想出来，就先放一放，换个时间再试。",
+  "休息不用等到清单全空了才算合理。",
+  "忙了一天，辛苦了。剩下的事，咱们一件件来。"
 ];
 let dailySummaryDay="",dailySummarySeen="",dailyAutoAttempted="",dailySummarySequence=0,dailySummaryPeriod="today",dailySummaryAutomatic=false,lastEncouragement=-1;
 function resetDailySummary(){
@@ -95,7 +95,7 @@ async function openDailySummary(period="today",automatic=false){
       if(task.archived_at)meta.append(element("span","已归档"));
       body.append(meta,element("strong",task.title));row.append(time,body);list.append(row);
     }
-    $("daily-summary-content").append(total,quote,data.tasks.length?list:element("p","这一天还没有标记完成的卡片。休息、尝试和慢慢推进，也都是一天的一部分。","daily-summary-empty"));
+    $("daily-summary-content").append(total,quote,data.tasks.length?list:element("p","这一天还没有标记完成的卡片。","daily-summary-empty"));
     if(automatic){
       dailySummarySeen=data.today;
       try{await api("/api/daily-summary/seen","POST",{day:data.today});}
@@ -103,7 +103,7 @@ async function openDailySummary(period="today",automatic=false){
     }
   }catch(error){
     if(session!==syncSession || sequence!==dailySummarySequence || !dialog.open)return;
-    $("daily-summary-date").textContent="暂时没能读取完成记录";$("daily-summary-error").textContent=error.message;$("daily-summary-retry").hidden=false;
+    $("daily-summary-date").textContent="没能读到完成记录，可以再试一次";$("daily-summary-error").textContent=error.message;$("daily-summary-retry").hidden=false;
   }
 }
 $("daily-summary-button").onclick=()=>openDailySummary();
@@ -122,14 +122,14 @@ async function archiveTask(task,archived){
 }
 async function startMessages(){
   const session=syncSession;resetMessages();
-  $("feedback-button").hidden=!trialMode;$("feedback-button").querySelector("span").textContent=isAdmin?"公告与答疑":"与管理员反馈";
-  $("feedback-title").textContent=isAdmin?"公告与答疑":"与管理员反馈";
+  $("feedback-button").hidden=!trialMode;$("feedback-button").querySelector("span").textContent=isAdmin?"公告与答疑":"建议与反馈";
+  $("feedback-title").textContent=isAdmin?"公告与答疑":"建议与反馈";
   $("feedback-dialog").classList.toggle("admin-chat",isAdmin);$("messages-error").textContent="";
   const results=await Promise.allSettled([api("/api/notices"),trialMode?api("/api/announcements"):Promise.resolve({announcements:[],last_read:0}),checkCloud(),checkCollector()]);
   if(session!==syncSession || $("workspace").hidden)return;
   releaseState=results[0].status==="fulfilled"?results[0].value:null;
   announcementState=results[1].status==="fulfilled"?results[1].value:null;
-  if(!releaseState || !announcementState)$("messages-error").textContent="部分消息暂时读取失败，可重新打开消息看板重试。";
+  if(!releaseState || !announcementState)$("messages-error").textContent="有几条消息没读到，请重新打开消息看板试试。";
   messageReady=true;refreshCommunityUnread();
 }
 function expiredSources(){return sources.filter(s=>needsLogin(s)&&(sourceLinksState===null||sourceLinksState.some(l=>l.source===s.id)));}
@@ -166,7 +166,7 @@ function renderMessages(manual){
   for(const category of ["作业","考试","会议","活动"]){const group=soon.filter(task=>task.category===category);if(!group.length)continue;const section=messageSection(`未来 7 天${category==="作业"?"到期":"开始"} · ${category} ${group.length} 项`);for(const task of group){const row=element("div",null,"message-task");row.append(element("strong",task.title),element("time",formatTime(category==="作业"?task.due_at:task.starts_at,true)));section.append(row);}}
   if(announcements.length){const section=messageSection("公告通知");for(const a of announcements){const row=element("article",null,"announcement");row.append(element("small",`管理员 · ${formatTime(a.created_at,true)}`),element("p",a.body));section.append(row);}}
   if(communityUnread){const section=messageSection(`收到 ${communityUnread} 条新消息`),button=element("button",isAdmin?"查看用户反馈":"查看管理员回复","secondary");button.onclick=()=>{$("messages-dialog").close();openChat();};section.append(button);}
-  if(!$("messages-content").children.length)$("messages-content").append(element("p","暂无新的消息或未来 7 天的安排。","muted"));
+  if(!$("messages-content").children.length)$("messages-content").append(element("p","还没有新消息，未来 7 天也没有待完成的安排。","muted"));
 }
 $("messages-button").onclick=async()=>{
   const session=syncSession;$("messages-error").textContent="";
@@ -210,7 +210,7 @@ async function selectChat(target){
 }
 function renderChat(){
   $("chat-bubbles").replaceChildren(...chatMessages.map(m=>{const row=element("article",null,"chat-message"+(m.mine?" mine":""));row.dataset.id=m.id;row.append(element("p",m.body,"chat-bubble"),element("time",formatTime(m.created_at,true)));return row;}));
-  if(!chatMessages.length)$("chat-bubbles").append(element("p",chatTarget==="announcements"?"还没有公告，在下方发布第一条。":"说说你的建议或遇到的问题。管理员回复后会在这里显示。","chat-empty"));
+  if(!chatMessages.length)$("chat-bubbles").append(element("p",chatTarget==="announcements"?"还没有公告，在下方发布第一条。":"有相似的需求，或是用着哪里不顺手，都可以告诉我。回复会留在这里。","chat-empty"));
   $("chat-older").hidden=!chatMore;
 }
 async function loadChat(older=false){

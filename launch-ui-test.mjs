@@ -11,6 +11,7 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const directory=await mkdtemp(join(tmpdir(),'rucapture-launch-ui-'));
 const {env,database}=await createEnvironment(directory,'launch-ui');
 database.prepare("INSERT INTO settings(key,value) VALUES ('read_release',?)").run(RELEASE.version);
+database.prepare("INSERT INTO settings(key,value) VALUES ('daily_summary_seen',?)").run(new Date(Date.now()+8*3600000).toISOString().slice(0,10));
 const server=createServer(async(req,res)=>{
   const response=await worker.fetch(new Request(`http://${req.headers.host}${req.url}`,{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:req,duplex:'half'}:{})}),env);
   res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));

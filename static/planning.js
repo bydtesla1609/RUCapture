@@ -185,7 +185,7 @@ function renderQuadrants(){
     if(p?.x==null)list.append(node);
     else{const point=quadrantPoint(p);node.classList.add("placed-card");node.style.left=`${point.x-PLANNING_CARD.width/2}px`;node.style.top=`${-point.y-PLANNING_CARD.height/2}px`;world.append(node);}
   }
-  if(!unplaced.length)list.append(element("p",items.length?"卡片都已安排。":"暂无待处理卡片。","hint"));
+  if(!unplaced.length)list.append(element("p",items.length?"卡片都已安排。":"还没有待处理卡片。","hint"));
 }
 const focusNow=()=>Date.now()+focusClockOffset;
 const activeFocus=()=>focusSessions.find(item=>item.state==="paused" || !item.finalized && (item.state==="running" || item===focusSessions[0]));
@@ -276,7 +276,7 @@ function renderFocusInformation(){
   $("focus-tasks").replaceChildren(...[...available.values()].sort(focusTaskOrder).map(task=>{
     const row=element("label",null,"focus-choice"),checkbox=element("input");row.dataset.category=task.category;checkbox.type="checkbox";checkbox.value=task.id;checkbox.checked=selected.has(task.id);row.append(checkbox,compactCard(task,true));return row;
   }));
-  if(!available.size)$("focus-tasks").append(element("p","暂无待处理卡片，也可以直接开始专注。","hint"));
+  if(!available.size)$("focus-tasks").append(element("p","没有可选卡片，直接开始也可以。","hint"));
   setFocusEditing(focusEditor.infoEditing);
 }
 function setFocusEditing(value){
@@ -294,7 +294,7 @@ function openFocus(){
   $("task-dialog").classList.add("focus-mode");
   for(const id of ["focus-intro","focus-settings","focus-targets","focus-info-actions","focus-history"])$(id).hidden=false;
   $("record-time").required=false;$("dialog-title").textContent="专注模式";
-  $("task-content").placeholder="开始前可以写上要做什么、对自己有什么要求。结束后可以写下这一段专注过程中的总结与反思";
+  $("task-content").placeholder="这段时间想做什么？做到了哪一步，还有哪里没弄懂？都可以记在这里。";
   $("editor-delete").hidden=true;$("focus-error").textContent="";
   renderFocusInformation();renderFocusTimer();renderFocusHistory();$("task-dialog").scrollTop=0;
 }
@@ -326,7 +326,7 @@ function renderFocusTimer(){
   if(key!==focusClockKey){renderFocusClock(seconds,!!item || focusActionBusy);focusClockKey=key;}
   $("focus-reset").disabled=!!item || focusActionBusy;$("focus-end").disabled=!(paused || item && !seconds) || focusActionBusy;
   $("focus-toggle").disabled=focusActionBusy || !item && !seconds;
-  $("focus-toggle").textContent=!item?"开始专注":!seconds?"选择是否保留记录":paused?"时间，再次流动！":"The World！ 时间，停止吧！";
+  $("focus-toggle").textContent=!item?"开始专注":!seconds?"选择是否保存":paused?"时间，再次流动！":"The World！ 时间，停止吧！";
   for(const id of ["focus-edit-info","focus-save-info","focus-cancel-info"])$(id).disabled=focusActionBusy;
 }
 async function finishFocus(item,save,natural=false){
@@ -350,7 +350,7 @@ $("focus-toggle").onclick=()=>{const item=activeFocus();if(item && item.state!==
 });};
 async function promptFocusEnd(item,natural=false){
   const session=syncSession;if(!item || focusActionBusy || $("focus-end-dialog").open)return;
-  if(natural)focusPrompted=item.id;$("focus-end-title").textContent=natural?"本次专注已完成":"本次专注已结束";$("focus-end-message").textContent=`您已${natural?"完成":"结束"}本次专注，是否需要保留记录？`;
+  if(natural)focusPrompted=item.id;$("focus-end-title").textContent=natural?"本次专注已完成":"本次专注已结束";$("focus-end-message").textContent="要保存这次的用时和填写的内容吗？";
   const dialog=$("focus-end-dialog");dialog.returnValue="";
   const choice=await new Promise(resolve=>{dialog.addEventListener("close",()=>resolve(dialog.returnValue),{once:true});dialog.showModal();});
   if(session===syncSession && ["save","discard"].includes(choice))await finishFocus(activeFocus() || item,choice==="save",natural);
@@ -405,7 +405,7 @@ function focusHistoryCard(item){
     row.dataset.dirty="true";
     const form=element("form",null,"focus-inline-editor"),titleLabel=element("label","标题"),titleInput=element("input"),contentLabel=element("label","内容"),contentInput=element("textarea"),error=element("p",null,"error");
     titleInput.id=`focus-title-${item.id}`;titleInput.maxLength=4000;titleInput.required=true;titleInput.value=item.record.title;titleLabel.htmlFor=titleInput.id;
-    contentInput.id=`focus-content-${item.id}`;contentInput.maxLength=10000;contentInput.rows=5;contentInput.value=item.record.content;contentInput.placeholder="开始前可以写上要做什么、对自己有什么要求。结束后可以写下这一段专注过程中的总结与反思";contentLabel.htmlFor=contentInput.id;error.setAttribute("role","alert");
+    contentInput.id=`focus-content-${item.id}`;contentInput.maxLength=10000;contentInput.rows=5;contentInput.value=item.record.content;contentInput.placeholder="这段时间想做什么？做到了哪一步，还有哪里没弄懂？都可以记在这里。";contentLabel.htmlFor=contentInput.id;error.setAttribute("role","alert");
     const buttons=element("div",null,"task-actions"),cancel=element("button","取消","text-button"),save=element("button","保存","primary"),remove=element("button","删除","text-button editor-delete");cancel.type=remove.type="button";save.type="submit";
     remove.setAttribute("aria-label",`删除：${item.record.title}`);remove.onclick=()=>deleteFocus(item,row);
     buttons.append(remove,cancel,save);form.append(titleLabel,titleInput,contentLabel,contentInput,error,buttons);

@@ -5,7 +5,7 @@ const chronological=(a,b)=>(cardTime(a)||"9999").localeCompare(cardTime(b)||"999
 function resetAxisScene(){axisScene=null;}
 function fillAxisSelect(value){
   const create=element("option","＋ 新增轴线");create.value="create-axis";create.dataset.action="create-axis";
-  $("task-axis").replaceChildren(...[{id:"",title:"（无）"},...axes].map(axis=>{const option=element("option",axis.title);option.value=axis.id;return option;}),create);
+  $("task-axis").replaceChildren(...[{id:"",title:"暂不加入轴线"},...axes].map(axis=>{const option=element("option",axis.title);option.value=axis.id;return option;}),create);
   $("task-axis").value=value || "";enhanceSelect($("task-axis"));
 }
 function createAxisFromCard(){
@@ -41,10 +41,10 @@ function renderAxisMembers(){
   const items=axisItems.filter(task=>task.axis_id===editingAxis?.id).sort(chronological),root=$("axis-members");
   root.replaceChildren();if(!editingAxis)return;
   root.append(element("h3",`卡片 · ${items.length}`));
-  if(!items.length)root.append(element("p","尚无卡片","hint"));
+  if(!items.length)root.append(element("p","还没有卡片。可以在卡片编辑里选择这条轴线，也可以点画布上末尾的加号添加。","hint"));
   for(const task of items){
     const row=element("div",null,"axis-member"),info=element("div"),meta=element("small",null,"task-kind"),quadrant=taskQuadrantBadge(task);meta.append(element("span",task.category));if(quadrant)meta.append(quadrant);meta.append(element("span",`${formatTime(cardTime(task))}${task.archived_at?" · 已归档":""}`));info.append(element("strong",task.title),meta);
-    const edit=element("button","编辑","text-button"),detach=element("button","离轴","text-button");edit.type=detach.type="button";
+    const edit=element("button","编辑","text-button"),detach=element("button","移出轴线","text-button");edit.type=detach.type="button";
     edit.onclick=()=>openTask(task);detach.onclick=async()=>{detach.disabled=true;try{await api(`/api/tasks/${task.id}`,"PATCH",{axis_id:null,revision:task.revision});lastPayload="";await refresh();renderAxisMembers();}catch(error){notice(error.message);detach.disabled=false;}};
     row.append(info,edit,detach);root.append(row);
   }
@@ -61,7 +61,7 @@ $("axis-form").onsubmit=async event=>{
   catch(error){$("axis-error").textContent=error.message;}finally{$("axis-save").disabled=false;}
 };
 $("axis-delete").onclick=async()=>{
-  if(!editingAxis || !await confirmAction(`删除轴线“${editingAxis.title}”？`,"其中的卡片会保留，只移除归轴关系。","删除轴线"))return;
+  if(!editingAxis || !await confirmAction(`删除轴线“${editingAxis.title}”？`,"只删除这条轴线，原来的卡片都会保留。","删除轴线"))return;
   $("axis-delete").disabled=true;try{await api(`/api/axes/${editingAxis.id}`,"DELETE",{revision:editingAxis.revision});$("axis-dialog").close();lastPayload="";await refresh();}catch(error){$("axis-error").textContent=error.message;}finally{$("axis-delete").disabled=false;}
 };
 const axisAdd=element("dialog",null,"axis-add-dialog");axisAdd.id="axis-add-dialog";
@@ -76,10 +76,12 @@ function renderAxes(){
   const board=$("board");board.className="axes-board";
   const toolbar=element("div",null,"axes-toolbar"),add=element("button","＋ 添加轴线","secondary");add.onclick=()=>openAxis();const actions=element("div",null,"axes-toolbar-actions"),save=element("button","保存布局","secondary");save.id="save-layout";
   actions.append(save,add);toolbar.append(element("span",`${axes.length} 条轴线`,"hint"),actions);
+  const help=element("details",null,"axis-help");help.open=!axes.length;
+  help.append(element("summary","轴线是什么？"),element("p","就是把同一个目标或合集里的卡片连起来。比如“期末复习”，放上作业、小测和复习笔记；以后回看，就知道自己做过哪些准备、哪些问题还没弄懂。点末尾加号添加卡片，拖动调整后记得保存布局。"));
   const canvas=element("div",null,"axes-canvas"),svg=svgElement("svg",{role:"group","aria-label":"轴线画布",tabindex:"0"}),world=svgElement("g");svg.append(world);canvas.append(svg);
   const controls=element("div",null,"canvas-controls");const buttons={};for(const [key,label] of [["minus","−"],["reset","复位"],["plus","＋"]]){const button=element("button",label);button.setAttribute("aria-label",{minus:"缩小画布",reset:"复位画布",plus:"放大画布"}[key]);buttons[key]=button;controls.append(button);}
-  canvas.append(controls);board.replaceChildren(toolbar,canvas);
-  if(!axes.length){const empty=element("button","＋ 添加第一条轴线","canvas-empty");empty.onclick=()=>openAxis();canvas.append(empty);return;}
+  canvas.append(controls);board.replaceChildren(toolbar,help,canvas);
+  if(!axes.length){const empty=element("button","＋ 为一个目标或合集建轴线","canvas-empty");empty.onclick=()=>openAxis();canvas.append(empty);return;}
   const signature=JSON.stringify(axes.map(axis=>[axis.id,...axisItems.filter(t=>t.axis_id===axis.id).sort(chronological).map(t=>[t.id,cardTime(t)])]));
   if(axisScene?.signature!==signature){
     const previous=axisScene || savedAxisLayout;

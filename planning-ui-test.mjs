@@ -11,6 +11,7 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const directory=await mkdtemp(join(tmpdir(),'rucapture-planning-ui-'));
 const {env,database}=await createEnvironment(directory,'isolated-planning-ui');
 database.prepare("INSERT INTO settings(key,value) VALUES ('read_release',?)").run(RELEASE.version);
+database.prepare("INSERT INTO settings(key,value) VALUES ('daily_summary_seen',?)").run(new Date(Date.now()+8*3600000).toISOString().slice(0,10));
 const server=createServer(async(req,res)=>{
   const response=await worker.fetch(new Request(`http://${req.headers.host}${req.url}`,{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:req,duplex:'half'}:{})}),env);
   res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
@@ -113,7 +114,7 @@ try{
   const ordered=(await page.locator('#focus-tasks .compact-task-info strong').allTextContents()).filter(t=>t.startsWith('顺序'));
   assert.deepEqual(ordered,[1,2,3,4].flatMap(i=>['考试','作业','会议','活动','记录'].map(type=>`顺序${i}-${type}`)));
   assert.equal(await page.locator('#task-location').isVisible(),false);assert.equal(await page.locator('#record-time').isVisible(),false);assert.equal(await page.locator('#focus-tools,#focus-new').count(),0);
-  assert.equal(await page.locator('#task-content').getAttribute('placeholder'),'开始前可以写上要做什么、对自己有什么要求。结束后可以写下这一段专注过程中的总结与反思');
+  assert.equal(await page.locator('#task-content').getAttribute('placeholder'),'这段时间想做什么？做到了哪一步，还有哪里没弄懂？都可以记在这里。');
   assert.match(await page.locator('#task-title').inputValue(),/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);assert.equal(await page.locator('#dialog-title').innerText(),'专注模式');assert.equal(await page.locator('#focus-state,#focus-started').count(),0);assert.equal(await page.locator('#task-form>.dialog-actions').isVisible(),false);assert.equal(await page.locator('#focus-end').isDisabled(),true);
   assert.ok(await page.locator('#focus-targets').evaluate(el=>el.previousElementSibling.id==='task-title'));assert.equal(await page.locator('.focus-target-label').innerText(),'目标卡片（选填，可多选）');
   const informationBefore=await page.evaluate(()=>structuredClone(focusDraft));
@@ -166,7 +167,7 @@ try{
   // Expire only this disposable test clock, leaving the input in edit mode.
   const stored=JSON.parse(database.prepare('SELECT value FROM settings WHERE key=?').get(`focus:${focus.id}`).value);stored.ends_at=new Date(Date.now()-1000).toISOString();database.prepare('UPDATE settings SET value=? WHERE key=?').run(JSON.stringify(stored),`focus:${focus.id}`);
   await page.evaluate(()=>loadFocus());await page.locator('#focus-end-dialog').waitFor({state:'visible'});
-  assert.equal(await page.locator('#focus-end-message').innerText(),'您已完成本次专注，是否需要保留记录？');
+  assert.equal(await page.locator('#focus-end-message').innerText(),'要保存这次的用时和填写的内容吗？');
   assert.equal(await page.locator('.focus-history-row').count(),0,'completion waits for the retention decision');
   await page.locator('#focus-end-dialog button[value=save]').click();await page.waitForFunction(()=>!focusActionBusy && focusSessions[0]?.finalized);
   const historyCard=page.locator('.focus-history-row');await historyCard.waitFor();assert.equal(await historyCard.locator('.task-content').innerText(),'自然结束后选择保留的当前内容');

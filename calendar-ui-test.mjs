@@ -11,6 +11,7 @@ const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const directory=await mkdtemp(join(tmpdir(),'rucapture-calendar-ui-'));
 const {env,database}=await createEnvironment(directory,'calendar-ui');
 database.prepare("INSERT INTO settings(key,value) VALUES ('read_release',?)").run(RELEASE.version);
+database.prepare("INSERT INTO settings(key,value) VALUES ('daily_summary_seen',?)").run(new Date(Date.now()+8*3600000).toISOString().slice(0,10));
 const server=createServer(async(req,res)=>{
   const response=await worker.fetch(new Request(`http://${req.headers.host}${req.url}`,{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:req,duplex:'half'}:{})}),env);
   res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));
@@ -65,6 +66,45 @@ try{
     for(const card of await page.locator('.calendar-event').all()){const footer=card.locator('.task-footer-main'),actions=await footer.locator('.task-actions').boundingBox(),status=footer.locator('.completion-control,.custom-select').first();if(await status.count()){const box=await status.boundingBox();assert.ok(Math.abs(box.y+box.height/2-actions.y-actions.height/2)<1,`footer stays on one line at ${width}`);}assert.ok(await footer.evaluate(n=>n.scrollWidth<=n.clientWidth));}
   }
   await page.setViewportSize({width:1440,height:1100});
+  // Complete a meeting from its detailed card: keep its category color and move the preview last.
+  await page.evaluate(async()=>{
+    for(const [category,title] of [['会议','主题团日'],['记录','网站发布日志']])await api('/api/tasks','POST',{category,title,starts_at:'2098-03-16T16:00:00+08:00',ends_at:'2098-03-16T17:00:00+08:00'});
+    await refresh();calendarSelect('2098-03-16');
+  });
+  const completionDay=page.locator('[data-date="2098-03-16"]'),meetingPreview=completionDay.locator('.day-task').filter({hasText:'主题团日'});
+  const colors=node=>{const s=getComputedStyle(node);return [s.color,s.borderLeftColor,s.backgroundColor];};
+  const meetingColors=await meetingPreview.evaluate(colors);
+  const meetingCard=page.locator('.calendar-event').filter({has:page.locator('.task-title',{hasText:'主题团日'})});
+  await meetingCard.locator('.completion-control input').check();
+  await page.waitForFunction(()=>tasks.find(t=>t.title==='主题团日')?.status==='done');
+  assert.deepEqual(await completionDay.locator('.day-task').allTextContents(),['网站发布日志','主题团日']);
+  assert.deepEqual(await meetingPreview.evaluate(colors),meetingColors,'completion preserves type colors');
+  assert.equal(await meetingPreview.evaluate(node=>getComputedStyle(node).textDecorationLine),'line-through');
+  assert.ok(await meetingPreview.evaluate(node=>Number(getComputedStyle(node).opacity)<.8 && Number(getComputedStyle(node).opacity)>.4),'completed label is visibly faded but readable');
+  assert.ok(await meetingPreview.evaluate(node=>parseFloat(getComputedStyle(node).textDecorationThickness)>=1.5),'completed label has a clear strike');
+  await completionDay.screenshot({path:'data/screenshots/calendar-completion.png'});
+  await page.evaluate(()=>document.documentElement.dataset.effects='off');
+  assert.deepEqual(await meetingPreview.evaluate(colors),meetingColors,'plain mode uses the same category color');
+  await page.evaluate(()=>delete document.documentElement.dataset.effects);
+  await page.evaluate(async()=>{await api('/api/tasks','POST',{category:'考试',title:'接下来的考试',starts_at:'2098-03-16T18:00:00+08:00',ends_at:'2098-03-16T19:00:00+08:00'});await refresh();});
+  assert.deepEqual(await completionDay.locator('.day-task').allTextContents(),['接下来的考试','网站发布日志']);
+  assert.equal(await completionDay.locator('.day-more').textContent(),'+1 项','completed card stays in the overflow count');
+  await meetingCard.locator('.completion-control input').uncheck();
+  await page.waitForFunction(()=>tasks.find(t=>t.title==='主题团日')?.status==='todo');
+  assert.deepEqual(await completionDay.locator('.day-task').allTextContents(),['接下来的考试','主题团日']);
+  assert.equal(await meetingPreview.evaluate(node=>getComputedStyle(node).textDecorationLine),'none');
+  assert.equal(await meetingPreview.evaluate(node=>getComputedStyle(node).opacity),'1');
+  await page.evaluate(async()=>{
+    for(const task of tasks.filter(t=>t.title==='主题团日'||t.title==='网站发布日志'||t.title==='接下来的考试'))await api(`/api/tasks/${task.id}`,'PATCH',{revision:task.revision,status:'done'});
+    await api('/api/tasks','POST',{category:'作业',title:'已经交掉的作业',due_at:'2098-03-17T22:00:00+08:00',status:'done'});
+    await refresh();
+  });
+  assert.deepEqual(await completionDay.locator('.day-task').allTextContents(),['接下来的考试','主题团日'],'all-completed days retain category order');
+  assert.equal(await completionDay.locator('.day-task.is-done').count(),2);
+  await page.evaluate(()=>calendarSelect('2098-03-17'));
+  assert.equal(await page.locator('[data-date="2098-03-17"] .day-task.is-done').textContent(),'已经交掉的作业','completed homework is retained too');
+  assert.equal(await page.locator('.calendar-event .task-title').textContent(),'已经交掉的作业');
+  await page.evaluate(()=>calendarSelect('2098-03-15'));
   // Editing all six task categories offers deletion; cancellation preserves the draft.
   for(const category of order){
     const event=page.locator('.calendar-event').filter({has:page.locator('.task-title',{hasText:`时间线${category}`})});await event.locator('.task-title').click();
