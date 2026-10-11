@@ -125,7 +125,7 @@
     <div id="schedule-fields" hidden><label for="schedule-person" id="schedule-person-label">教师 <span class="optional">选填</span></label><input id="schedule-person" maxlength="300" placeholder="选填"><label for="schedule-seat">座位号 <span class="optional">选填</span></label><input id="schedule-seat" maxlength="300"></div><div class="field-heading"><span>待办事项 <span class="optional">选填</span></span><span class="hint">拖动 ⋮⋮ 排序</span></div>
     <div id="task-todos"></div>
     <div class="resource-heading"><span>附件 <span class="optional">选填</span></span><span id="file-limit-hint" class="hint">单个文件 ≤ 10 MB</span></div>
-    <div class="resource-editor"><div id="task-attachments" class="resources"></div><label class="upload-control" for="attachment-input">添加文件<input id="attachment-input" type="file" multiple></label><p id="upload-state" class="upload-state" role="status"></p><p class="hint">作业要求、复习资料或图片都可以放在这里，随卡片一起保存，最多 20 个。</p></div>
+    <div class="resource-editor"><p id="attachment-storage" class="hint" role="status"></p><p id="attachment-error" class="error" role="alert"></p><div id="task-attachments" class="resources"></div><label class="upload-control" for="attachment-input">添加文件<input id="attachment-input" type="file" multiple aria-describedby="file-limit-hint attachment-storage attachment-error"></label><p id="upload-state" class="upload-state" role="status"></p><p class="hint">每张卡片最多 20 个附件；所有卡片共用账号空间，含归档卡片和暂存文件。</p></div>
     <div class="resource-heading"><span>链接 <span class="optional">选填</span></span><button id="add-link" type="button" class="text-button">＋ 添加链接</button></div>
     <div id="task-links" class="resource-editor"></div>
     <p id="task-source" class="source-original" hidden></p>

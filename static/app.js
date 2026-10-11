@@ -11,6 +11,7 @@ let tasks = [], sources = [], categoryFilter = "全部", editing = null, deletin
 let syncRevision=null,syncBusy=false,lastFullSync=0;
 let refreshSequence = 0, lastPayload = "", toastTimer, taskCategory = "作业", draftTodos = [];
 let draftAttachments = [], uploading = false, draftTaskId=null;
+let attachmentStorage=null;
 let timetables=[], courseSemester=null, courseWeek="all";
 let collectorState=null, cloudState=null, syncing=false;
 let syncSession=0, cloudCheckSequence=0, collectorCheckSequence=0, lastCloudCheck=0;
@@ -109,7 +110,7 @@ function showLogin() {
   $("board").replaceChildren(); $("sources-list").replaceChildren(); collectorState=null; cloudState=null;
   sourceLinksState=null;if(trialMode)boardAccount="";
   syncStep=syncVisited=1;syncExecuted=false;cloudPanelLoading=false;$("cloud-panel").replaceChildren();
-  editing=null;deleting=null;draftTodos=[];draftAttachments=[];calendarTypes=new Set(CALENDAR_TYPES);
+  editing=null;deleting=null;draftTodos=[];draftAttachments=[];attachmentStorage=null;calendarTypes=new Set(CALENDAR_TYPES);
   $("task-form").reset();$("task-todos").replaceChildren();$("task-links").replaceChildren();$("task-attachments").replaceChildren();$("source-url").value="";$("website-list").replaceChildren();$("source-links-form").hidden=true;$("recovery-value").textContent="";$("account-password").value="";
 }
 function formatTime(value, includeYear = false) {
@@ -146,6 +147,12 @@ function renderAttachments() {
   $("task-attachments").replaceChildren(...draftAttachments.map(file=>fileRow(file,true)));
   if (!draftAttachments.length) $("task-attachments").append(element("p", "还没有附件", "resource-empty"));
 }
+function renderAttachmentStorage(storage=attachmentStorage) {
+  attachmentStorage=storage;
+  const limit=storage?.limit || (trialMode?5:100)*1024*1024,fileLimit=storage?.file_limit || (trialMode?1:10)*1024*1024;
+  $("file-limit-hint").textContent=`单个文件 ≤ ${fileLimit/1024/1024} MB`;
+  $("attachment-storage").textContent=storage?`账号附件：已用 ${fileSize(storage.used)} / ${limit/1024/1024} MB · 剩余 ${fileSize(Math.max(0,limit-storage.used))}`:`所有卡片共用账号 ${limit/1024/1024} MB 空间，用量待刷新`;
+}
 function addLinkRow(link = {label:"",url:""}) {
   if ($("task-links").querySelectorAll(".link-edit-row").length >= 20) { notice("最多添加 20 个链接"); return; }
   $("task-links").querySelector(".resource-empty")?.remove();
@@ -157,9 +164,10 @@ function addLinkRow(link = {label:"",url:""}) {
 $("add-link").onclick=()=>addLinkRow();
 $("attachment-input").onchange=async () => {
   const selected=[...$("attachment-input").files]; if (!selected.length) return;
-  $("task-error").textContent="";
-  if (selected.length + draftAttachments.length > 20) { $("task-error").textContent="每项任务最多 20 个附件"; $("attachment-input").value=""; return; }
-  if (selected.some(file=>!file.size || file.size>10*1024*1024)) { $("task-error").textContent="附件不能为空，单个文件最多 10 MB"; $("attachment-input").value=""; return; }
+  $("attachment-error").textContent="";$("upload-state").textContent="";
+  if (selected.length + draftAttachments.length > 20) { $("attachment-error").textContent="每张卡片最多 20 个附件"; $("attachment-input").value=""; return; }
+  const fileLimit=attachmentStorage?.file_limit || (trialMode?1:10)*1024*1024;
+  if (selected.some(file=>!file.size || file.size>fileLimit)) { $("attachment-error").textContent=`附件不能为空，单个文件最多 ${fileLimit/1024/1024} MB`; $("attachment-input").value=""; return; }
   uploading=true; $("save-task").disabled=true; $("attachment-input").disabled=true;
   $("task-dialog").querySelectorAll(".close-dialog").forEach(button=>button.disabled=true); renderAttachments();
   try {
@@ -170,15 +178,16 @@ $("attachment-input").onchange=async () => {
       try {
         const response=await fetch("/api/files",{method:"POST",body:form,signal:controller.signal});
         let data; try { data=await response.json(); } catch { throw new Error("文件上传失败，请重试"); }
+        if(data.storage)renderAttachmentStorage(data.storage);
         if (!response.ok) throw new Error(data.error || "文件上传失败，请重试");
-        draftAttachments.push({...data,pending:true}); renderAttachments();
+        const {storage,...fileData}=data;draftAttachments.push({...fileData,pending:true}); renderAttachments();
       }catch(error){
         if(controller.signal.aborted || error.name==="AbortError" || error instanceof TypeError)throw new Error("上传连接中断，请重新选择未上传的文件。卡片内容已保留。");
         throw error;
       }finally{clearTimeout(timer);}
     }
     $("upload-state").textContent="上传完成，保存任务后即可在所有设备打开。";
-  } catch (error) { $("task-error").textContent=error.message; $("upload-state").textContent="未上传成功的文件可重新选择，已上传部分会保留。"; }
+  } catch (error) { $("attachment-error").textContent=error.message; $("attachment-error").scrollIntoView({block:"center"});$("upload-state").textContent="未上传成功的文件可重新选择，已上传部分会保留。"; }
   finally { uploading=false; $("save-task").disabled=false; $("attachment-input").disabled=false; $("attachment-input").value=""; $("task-dialog").querySelectorAll(".close-dialog").forEach(button=>button.disabled=false); renderAttachments(); }
 };
 $("task-dialog").addEventListener("cancel",event=>{if(uploading) event.preventDefault();});
@@ -1039,6 +1048,7 @@ async function refresh({poll=false}={}) {
     if(typeof applyDailySummaryStatus==="function")applyDailySummaryStatus(data);
     if(data.unchanged){focusClockOffset=Date.parse(data.server_time)-Date.now();tickFocus();maybeLoginReminder();return;}
     syncRevision=data.sync_revision;lastFullSync=Date.now();
+    if(data.storage && !uploading)renderAttachmentStorage(data.storage);
     tasks = data.tasks;if(axisLayoutRevision!==(data.axis_layout?.revision || 0) && !axisScene?.dirty)resetAxisScene();savedAxisLayout=data.axis_layout?.layout || null;axisLayoutRevision=data.axis_layout?.revision || 0; axes=data.axes || [];axisItems=data.axis_items || [];sources = data.sources; timetables=data.timetables || [];
     quadrantPositions=data.quadrants || {};if(data.focus)applyFocus(data.focus);else loadFocus();
     if($("sources-dialog").open && collectorState)checkCollector();
@@ -1081,7 +1091,9 @@ function openTask(task = null) {
   $("schedule-seat").hidden=taskCategory!=="考试";
   document.querySelector('label[for="schedule-seat"]').hidden=taskCategory!=="考试";
   draftTodos = structuredClone(task?.todos || []);
-  draftAttachments = structuredClone(task?.attachments || []); renderAttachments(); $("upload-state").textContent="";
+  draftAttachments = structuredClone(task?.attachments || []); renderAttachments(); $("upload-state").textContent="";$("attachment-error").textContent="";renderAttachmentStorage();
+  const session=syncSession,previousStorage=attachmentStorage;
+  api("/api/files").then(storage=>{if(session===syncSession && attachmentStorage===previousStorage && !uploading)renderAttachmentStorage(storage);}).catch(()=>{});
   $("task-links").replaceChildren(); for (const link of task?.links || []) addLinkRow(link);
   if (!(task?.links || []).length) $("task-links").append(element("p", "课程资料、会议地址、在线文档，都可以把链接放在这里。", "resource-empty"));
   $("task-source").hidden=!task?.source_url; $("task-source").replaceChildren();
@@ -1254,7 +1266,8 @@ function configureAccount(data) {
   updateAccountCard();
   $("trial-auth").hidden=!trialMode;$("auth-recover").hidden=!trialMode;$("account-button").hidden=!trialMode;
   $("username").required=trialMode;$("password").minLength=trialMode?6:0;
-  if(trialMode){setAuthMode("login");$("auth-register").disabled=!registrationOpen;$("trial-notice").hidden=registrationOpen;$("trial-notice").textContent=registrationOpen?"":"暂未开放新注册，已有账号可登录";$("file-limit-hint").textContent="单个文件 ≤ 1 MB · 每人 5 MB";}
+  if(trialMode){setAuthMode("login");$("auth-register").disabled=!registrationOpen;$("trial-notice").hidden=registrationOpen;$("trial-notice").textContent=registrationOpen?"":"暂未开放新注册，已有账号可登录";}
+  renderAttachmentStorage();
 }
 function showRecovery(code) {
   $("account-dialog").close();$("recovery-value").textContent=code;$("recovery-done").disabled=true;$("recovery-dialog").showModal();

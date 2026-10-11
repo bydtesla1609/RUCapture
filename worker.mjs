@@ -281,8 +281,10 @@ async function uploadFile(request,db,fileLimit=FILE_LIMIT,storageLimit=STORAGE_L
     statements.push(db.prepare("INSERT INTO file_chunks(file_id,part,data) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM files WHERE id=?)").bind(id,part,data.slice(offset,offset+CHUNK_SIZE).buffer,id));
   }
   const result=await db.batch(statements);
-  if(result[0].meta.changes!==1) fail(413,`附件空间已满（${storageLimit/1024/1024} MB），请移除不需要的附件后稍后重试`);
-  return json({id,name,type,size:file.size},201);
+  const storage={used:(await db.prepare("SELECT coalesce(sum(size),0) AS used FROM files").first()).used,limit:storageLimit,file_limit:fileLimit};
+  // D1 counts sync-trigger writes too: a successful insert can change more than one row.
+  if(result[0].meta.changes===0) return json({error:`账号附件空间不足，无法保存此文件（所有卡片合计最多 ${storageLimit/1024/1024} MB）。请缩小文件或清理不需要的附件。`,storage},413);
+  return json({id,name,type,size:file.size,storage},201);
 }
 async function downloadFile(request,db,id) {
   const file=await db.prepare(`SELECT * FROM files WHERE id=? AND (EXISTS(SELECT 1 FROM tasks,json_each(tasks.attachments) WHERE tasks.deleted=0 AND json_each.value=files.id) OR id IN (${focusFileSQL}?))`).bind(id,new Date(Date.now()-7*86400000).toISOString()).first();
@@ -391,6 +393,7 @@ async function route(request, env) {
     return json(await importCourseInput(snapshot.input,db,configuredSources(env)));
   }
   if(path==="/api/files" && method==="POST") return uploadFile(request,db,env.TRIAL_MODE?1024*1024:FILE_LIMIT,env.TRIAL_MODE?5*1024*1024:STORAGE_LIMIT);
+  if(path==="/api/files" && method==="GET") return json({used:(await db.prepare("SELECT coalesce(sum(size),0) AS used FROM files").first()).used,limit:env.TRIAL_MODE?5*1024*1024:STORAGE_LIMIT,file_limit:env.TRIAL_MODE?1024*1024:FILE_LIMIT});
   const fileMatch=path.match(/^\/api\/files\/([a-zA-Z0-9-]{1,50})$/);
   if(fileMatch && ["GET","HEAD"].includes(method)) return downloadFile(request,db,fileMatch[1]);
   if(path==="/api/logout" && method==="POST") {
@@ -491,7 +494,7 @@ async function route(request, env) {
         db.prepare("UPDATE tasks SET axis_id=NULL,revision=revision+1,updated_at=? WHERE axis_id=? AND EXISTS(SELECT 1 FROM axes WHERE id=? AND revision=? AND deleted=0)").bind(stamp,id,id,data.revision),
         db.prepare("UPDATE axes SET deleted=1,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND deleted=0").bind(stamp,id,data.revision)
       ]);
-      if(result[1].meta.changes!==1)fail(409,"轴线已更新，请重新打开");return json({ok:true});
+      if(result[1].meta.changes===0)fail(409,"轴线已更新，请重新打开");return json({ok:true});
     }
     const axis=validateAxis(data);
     const row=await db.prepare("UPDATE axes SET title=?,content=?,starts_at=?,ends_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND deleted=0 RETURNING *").bind(axis.title,axis.content,axis.starts_at,axis.ends_at,stamp,id,data.revision).first();
@@ -531,7 +534,7 @@ async function route(request, env) {
     if(!Number.isInteger(data.revision)) fail(400,"缺少任务版本，请刷新重试");
     if(method==="DELETE") {
       const result=await db.prepare("UPDATE tasks SET deleted=1,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND deleted=0").bind(now(),id,data.revision).run();
-      if(result.meta.changes!==1) fail(409,"此任务已在另一设备更新，请刷新后重试");
+      if(result.meta.changes===0) fail(409,"此任务已在另一设备更新，请刷新后重试");
       return json({ok:true});
     }
     const previous=await db.prepare("SELECT * FROM tasks WHERE id=? AND deleted=0").bind(id).first();

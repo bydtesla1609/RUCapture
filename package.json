@@ -29,6 +29,7 @@
     "test:planning-ui": "node planning-ui-test.mjs",
     "test:calendar-ui": "node calendar-ui-test.mjs",
     "test:mobile-save-ui": "node mobile-save-ui-test.mjs",
+    "test:attachment-ui": "node attachment-ui-test.mjs",
     "test:launch-ui": "node launch-ui-test.mjs",
     "test:free-sync-ui": "node free-sync-ui-test.mjs",
     "preview": "node preview.mjs",

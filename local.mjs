@@ -8,12 +8,14 @@ import {syncSchema} from "./sync.mjs";
 import worker, {digest} from "./worker.mjs";
 
 const root=dirname(fileURLToPath(import.meta.url));
-export function sqliteBinding(database) {
+export function sqliteBinding(database,{includeTriggerChanges=false}={}) {
+  // Regression tests can include trigger writes, as Cloudflare D1's meta.changes does.
+  const totalChanges=()=>Number(database.prepare("SELECT total_changes() AS n").get().n);
   const wrap=(sql,args=[])=>({
     bind(...params){return wrap(sql,params.map(value=>value instanceof ArrayBuffer ? new Uint8Array(value) : value));},
     async first(){return database.prepare(sql).get(...args) || null;},
     async all(){return {results:database.prepare(sql).all(...args)};},
-    async run(){const result=database.prepare(sql).run(...args);return {meta:{changes:Number(result.changes)}};},
+    async run(){const before=includeTriggerChanges?totalChanges():0,result=database.prepare(sql).run(...args);return {meta:{changes:includeTriggerChanges?totalChanges()-before:Number(result.changes)}};},
     _sql:sql,_args:args
   });
   return {prepare:wrap,async batch(statements){
@@ -22,7 +24,7 @@ export function sqliteBinding(database) {
       const results=statements.map(s=>{
         const statement=database.prepare(s._sql);
         if(statement.columns().length) return {results:statement.all(...s._args),meta:{changes:0}};
-        const result=statement.run(...s._args);return {results:[],meta:{changes:Number(result.changes)}};
+        const before=includeTriggerChanges?totalChanges():0,result=statement.run(...s._args);return {results:[],meta:{changes:includeTriggerChanges?totalChanges()-before:Number(result.changes)}};
       });
       database.exec("COMMIT");return results;
     } catch(error){database.exec("ROLLBACK");throw error;}

@@ -54,6 +54,9 @@ if(!process.env.TRIAL_UI_FIXTURE) test("trial accounts enforce invitations, isol
     assert.equal((await b.api("/api/source-links")).data.links.length,0);
     const file=new FormData();file.set("file",new Blob(["%PDF-test"],{type:"application/pdf"}),"test.pdf");
     const upload=await a.api("/api/files","POST",file);assert.equal(upload.status,201);const fileId=upload.data.id;
+    assert.deepEqual((await a.api("/api/files")).data,{used:9,limit:5*1024*1024,file_limit:1024*1024});
+    assert.equal((await b.api("/api/files")).data.used,0);
+    assert.equal((await anonymous.api("/api/files")).status,401);
     const oversized=new FormData();oversized.set("file",new Blob([new Uint8Array(1024*1024+1)]),"large.bin");
     assert.equal((await a.api("/api/files","POST",oversized)).status,413);
     assert.equal((await b.api(`/api/files/${fileId}`)).status,404);

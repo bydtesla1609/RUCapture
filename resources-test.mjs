@@ -4,7 +4,33 @@ import {mkdtemp,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import worker from "./worker.mjs";
-import {createEnvironment} from "./local.mjs";
+import {createEnvironment,sqliteBinding} from "./local.mjs";
+
+test("D1 trigger write counts do not reject uploads or successful deletions; real quota and conflicts still apply",async()=>{
+  const directory=await mkdtemp(join(tmpdir(),"campus-d1-counts-"));
+  const {env,database}=await createEnvironment(directory,"counts-test");
+  env.DB=sqliteBinding(database,{includeTriggerChanges:true});env.TRIAL_MODE=true;env.TRIAL_AUTHENTICATED=true;
+  const request=(path,method="GET",value)=>worker.fetch(new Request(`https://board.example${path}`,{method,...(value===undefined?{}:value instanceof FormData?{body:value}:{headers:{"Content-Type":"application/json"},body:JSON.stringify(value)})}),env);
+  const upload=async size=>{const form=new FormData();form.set("file",new File([new Uint8Array(size)],"test.txt"));return request("/api/files","POST",form);};
+  try{
+    const uploaded=await upload(14250);assert.equal(uploaded.status,201,"a successful file insert also writes the sync marker");
+    const file=await uploaded.json();assert.equal(database.prepare("SELECT size FROM files WHERE id=?").get(file.id).size,14250);
+    const axis=await (await request("/api/axes","POST",{title:"temporary axis"})).json();
+    const task=await (await request("/api/tasks","POST",{title:"temporary card",category:"记录",starts_at:"2026-10-11T00:00:00Z",ends_at:"2026-10-11T00:00:00Z",attachments:[file.id],axis_id:axis.id})).json();
+    assert.equal((await request(`/api/axes/${axis.id}`,"DELETE",{revision:axis.revision+10})).status,409);
+    assert.equal((await request(`/api/axes/${axis.id}`,"DELETE",{revision:axis.revision})).status,200);
+    const updated=await (await request(`/api/tasks/${task.id}`)).json();assert.equal(updated.axis_id,null);
+    assert.equal((await request(`/api/tasks/${task.id}`,"DELETE",{revision:task.revision})).status,409);
+    assert.equal((await request(`/api/tasks/${task.id}`,"DELETE",{revision:updated.revision})).status,200);
+    for(let i=0;i<4;i++)assert.equal((await upload(1024*1024)).status,201);
+    const before=database.prepare("SELECT count(*) AS n FROM files").get().n;
+    assert.equal((await upload(1024*1024)).status,413,"not enough room for this file, even though the account is not full");
+    assert.equal(database.prepare("SELECT count(*) AS n FROM files").get().n,before);
+    assert.equal((await upload(1024*1024-14250)).status,201,"exact quota boundary is allowed");
+    assert.equal((await upload(1)).status,413);
+    assert.equal((await upload(1024*1024+1)).status,413);
+  }finally{database.close();await rm(directory,{recursive:true,force:true});}
+});
 
 test("private attachments, links, byte ranges, persistence, cleanup and import URLs",async()=>{
   const directory=await mkdtemp(join(tmpdir(),"campus-resources-"));
