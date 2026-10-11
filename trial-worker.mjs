@@ -149,10 +149,11 @@ async function route(request,env) {
     return createSession(db,user,{},data.remember===true);
   }
   if(path==="/api/logout" && method==="POST") {await db.prepare("DELETE FROM trial_sessions WHERE hash=?").bind(hash).run();return json({ok:true},200,{"Set-Cookie":sessionCookie("",0)});}
-  let user=session;
+  let user=session,collectorHash=null;
   if(collectorPath) {
     const bearer=request.headers.get("Authorization")?.match(/^Bearer ([a-f0-9]{48})$/)?.[1];
-    user=bearer?await db.prepare("SELECT u.* FROM trial_users u JOIN trial_collectors c ON c.user_id=u.id WHERE c.hash=? AND u.status='active'").bind(await digest(bearer)).first():null;
+    collectorHash=bearer?await digest(bearer):null;
+    user=collectorHash?await db.prepare("SELECT u.* FROM trial_users u JOIN trial_collectors c ON c.user_id=u.id WHERE c.hash=? AND u.status='active'").bind(collectorHash).first():null;
   }
   if(!user)fail(401,"请先登录自己的账号，或重新连接扩展");
   if(path.startsWith("/api/feedback/") || path.startsWith("/api/announcements"))return community(request,env,user,{body,limit});
@@ -164,10 +165,11 @@ async function route(request,env) {
     const recovery=random();await db.prepare("UPDATE trial_users SET recovery_hash=? WHERE id=?").bind(await digest(recovery),user.id).run();return json({recovery});
   }
   if(path.startsWith("/api/academic/retry"))fail(403,"请通过浏览器重新同步课表");
-  const scoped={...userEnvironment(env,user),TRIAL_AUTHENTICATED:!collectorPath};
+  const scoped={...userEnvironment(env,user),TRIAL_AUTHENTICATED:!collectorPath,TRIAL_COLLECTOR_HASH:collectorHash};
   if(path==="/api/collector-token" && method==="POST") {
     const collector=random(),hash=await digest(collector);
-    await db.batch([db.prepare("INSERT INTO trial_collectors(hash,user_id) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET hash=excluded.hash").bind(hash,user.id),scoped.DB.prepare("INSERT INTO settings(key,value) VALUES ('collector_hash',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(hash)]);
+    // Keep one authoritative hash: D1 batches cannot span account databases.
+    await db.prepare("INSERT INTO trial_collectors(hash,user_id) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET hash=excluded.hash").bind(hash,user.id).run();
     return json({token:collector});
   }
   const response=await board.fetch(request,scoped);

@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {sqliteBinding} from './local.mjs';
 import {accountStorageSchema,accountDatabase,trialSchema} from './trial-schema.mjs';
 import trial,{runTrialCloud} from './trial-worker.mjs';
+import {digest} from './worker.mjs';
 process.env.TRIAL_UI_FIXTURE='1';
 const {trialFixture}=await import('./trial-test.mjs');
 
@@ -38,6 +39,70 @@ test('public registration preserves legacy login, spans shards, protects admin, 
     assert.equal((await clients[0].api('/api/recover','POST',{username:'original_admin',password:'New123',recovery:'invalid'})).status,401);
     assert.throws(()=>accountDatabase(env,301));assert.throws(()=>accountDatabase({...env,STORE_A:null},31));
   }finally{database.close();for(const db of stores)db.close();}
+});
+
+test('collector pairing spans database boundaries, isolates accounts and preserves authorization on failed renewal',async()=>{
+  const {database,env}=await trialFixture(),stores=[];
+  const accounts=[];
+  const api=async(path,method='GET',headers={},body)=>{
+    const response=await trial.fetch(new Request('https://rucapture.pages.dev'+path,{method,headers:{'Content-Type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})}),env);
+    return {status:response.status,data:await response.json()};
+  };
+  const bearer=token=>({Authorization:'Bearer '+token});
+  try{
+    for(const [binding,start,end] of [['STORE_A',31,120],['STORE_B',121,210],['STORE_C',211,300]]){
+      const store=new DatabaseSync(':memory:');store.exec(accountStorageSchema(start,end));env[binding]=sqliteBinding(store);stores.push(store);
+    }
+    assert.equal((await api('/api/collector-token','POST',{},{})).status,401);
+    for(const slot of [1,30,31,120,121,210,211,300]){
+      const id='collector-'+slot,session='session-'+slot,cookie={Cookie:'trial_session='+session};
+      database.prepare("INSERT INTO trial_users(id,slot,username,status,created_at) VALUES (?,?,?,'active',0)").run(id,slot,'collector_'+slot);
+      database.prepare('INSERT INTO trial_sessions(hash,user_id,expires) VALUES (?,?,?)').run(await digest(session),id,Date.now()+60000);
+      const storage=accountDatabase(env,slot);
+      // An existing account's old per-account hash must not override the central registry.
+      await storage.prepare(`INSERT INTO u${slot}_settings(key,value) VALUES ('collector_hash','legacy-hash')`).run();
+      const previous=slot.toString(16).padStart(48,'0');
+      database.prepare('INSERT INTO trial_collectors(hash,user_id) VALUES (?,?)').run(await digest(previous),id);
+      assert.equal((await api('/api/collector-config','GET',bearer(previous))).data.account,id);
+      const issued=await api('/api/collector-token','POST',cookie,{});
+      assert.equal(issued.status,200,`slot ${slot}: ${JSON.stringify(issued.data)}`);
+      const token=issued.data.token;assert.match(token,/^[a-f0-9]{48}$/);
+      assert.equal((await api('/api/collector-config','GET',bearer(previous))).status,401);
+      const config=await api('/api/collector-config','GET',bearer(token));
+      assert.equal(config.status,200);assert.equal(config.data.account,id);
+      accounts.push({id,slot,cookie,token,storage});
+    }
+    for(const account of accounts){
+      assert.equal((await account.storage.prepare(`SELECT value FROM u${account.slot}_settings WHERE key='collector_hash'`).first()).value,'legacy-hash');
+      const imported=await api('/api/import','POST',bearer(account.token),{source:'smartestu',tasks:[{external_id:'shared-id',title:account.id,status:'todo'}]});
+      assert.equal(imported.status,200);assert.equal(imported.data.changed,1);
+      const tasks=await account.storage.prepare(`SELECT title FROM u${account.slot}_tasks`).all();
+      assert.deepEqual(tasks.results.map(task=>task.title),[account.id]);
+      assert.equal((await api('/api/board','GET',bearer(account.token))).status,401);
+      assert.equal((await api('/api/collector-config','GET',account.cookie)).status,401);
+      const renewed=await api('/api/collector-token','POST',account.cookie,{});assert.equal(renewed.status,200);
+      assert.equal((await api('/api/collector-config','GET',bearer(account.token))).status,401);
+      account.token=renewed.data.token;
+      assert.equal((await api('/api/collector-config','GET',bearer(account.token))).data.account,account.id);
+    }
+    const account=accounts.find(account=>account.slot===31),other=accounts[0];
+    assert.equal((await api('/api/collector-config','GET',{...other.cookie,...bearer(account.token)})).data.account,account.id);
+    database.exec("CREATE TRIGGER fail_collector_renewal BEFORE UPDATE ON trial_collectors BEGIN SELECT RAISE(ABORT,'synthetic database failure'); END;");
+    assert.equal((await api('/api/collector-token','POST',account.cookie,{})).status,500);
+    assert.equal((await api('/api/collector-config','GET',bearer(account.token))).status,200);
+    database.exec('DROP TRIGGER fail_collector_renewal');
+    const retried=await api('/api/collector-token','POST',account.cookie,{});assert.equal(retried.status,200);
+    account.token=retried.data.token;
+    assert.equal((await api('/api/collector-config','GET',bearer(account.token))).status,200);
+    database.prepare('DELETE FROM trial_collectors WHERE user_id=?').run(account.id);
+    assert.equal((await api('/api/collector-config','GET',bearer(account.token))).status,401);
+    assert.equal((await api('/api/collector-config','GET',bearer(other.token))).status,200);
+    for(const [path,method] of [['/api/collector-config','GET'],['/api/import','POST'],['/api/academic/timetable','POST'],['/api/cloud-authorize','POST'],['/api/cloud-credentials','POST']]){
+      for(const token of [undefined,'f'.repeat(48),account.token]){
+        assert.equal((await api(path,method,{...account.cookie,...(token?bearer(token):{})},method==='POST'?{}:undefined)).status,401);
+      }
+    }
+  }finally{database.close();for(const store of stores)store.close();}
 });
 
 test('account capacity migration preserves users, existing sessions, collector ownership and feedback foreign keys',async()=>{

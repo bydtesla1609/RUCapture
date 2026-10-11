@@ -164,13 +164,15 @@ function validateAxis(value) {
   if(starts_at && ends_at && starts_at>ends_at)fail(400,"结束时间不能早于开始时间");
   return {title:title.trim(),content:content.trim(),starts_at,ends_at};
 }
-async function collectorAuth(request,db) {
+async function collectorAuth(request,env) {
   const token=request.headers.get("Authorization")?.match(/^Bearer ([A-Za-z0-9_-]{20,100})$/)?.[1];
-  const saved=await db.prepare("SELECT value FROM settings WHERE key='collector_hash'").first();
-  if(!token || !saved || !equal(await digest(token),saved.value)) fail(401,"请重新配对作业导入扩展");
+  // Trial requests carry only the hash already verified against the central account registry.
+  const saved=env.TRIAL_MODE?env.TRIAL_COLLECTOR_HASH:(await env.DB.prepare("SELECT value FROM settings WHERE key='collector_hash'").first())?.value;
+  if(!token || !saved || !equal(await digest(token),saved)) fail(401,"请重新配对作业导入扩展");
 }
-async function importTasks(request, db, sources) {
-  await collectorAuth(request,db);
+async function importTasks(request, env, sources) {
+  await collectorAuth(request,env);
+  const db=env.DB;
   const payload=await body(request);
   if(payload.academic!==undefined) {
     if(sources.trial)fail(400,"试用版请更新扩展后分批同步课表");
@@ -343,14 +345,14 @@ async function route(request, env) {
     ]);
     return json({ok:true},200,{"Set-Cookie":cookie(request,token,data.remember===true?30*86400:null)});
   }
-  if(path==="/api/import" && method==="POST") return importTasks(request,db,{...await allSources(env),...(env.TRIAL_MODE?{trial:true}:{})});
+  if(path==="/api/import" && method==="POST") return importTasks(request,env,{...await allSources(env),...(env.TRIAL_MODE?{trial:true}:{})});
   if(path==="/api/academic/timetable" && method==="POST") {
-    await collectorAuth(request,db);const input=globalThis.RUAcademic.courseInput((await body(request)).academic),table=globalThis.RUAcademic.timetable(input);
+    await collectorAuth(request,env);const input=globalThis.RUAcademic.courseInput((await body(request)).academic),table=globalThis.RUAcademic.timetable(input);
     await db.prepare("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE settings.value IS NOT excluded.value").bind(`timetable:${input.semester}`,JSON.stringify(table)).run();return json({ok:true});
   }
-  if(path==="/api/collector-config" && method==="GET") { await collectorAuth(request,db); const cloud=await cloudStatus(env);return json({sources:await allSources(env),links:await savedLinks(env),account:env.TRIAL_USER || "personal",cloud_enabled:cloud.enabled,cloud_sources:cloud.sources}); }
-  if(path==="/api/cloud-authorize" && method==="POST") {await collectorAuth(request,db);return json(await enableCloud(env));}
-  if(path==="/api/cloud-credentials" && method==="POST") {await collectorAuth(request,db);const value=await body(request);return json(await saveCloudRecipe(env,value.source,value.recipe));}
+  if(path==="/api/collector-config" && method==="GET") { await collectorAuth(request,env); const cloud=await cloudStatus(env);return json({sources:await allSources(env),links:await savedLinks(env),account:env.TRIAL_USER || "personal",cloud_enabled:cloud.enabled,cloud_sources:cloud.sources}); }
+  if(path==="/api/cloud-authorize" && method==="POST") {await collectorAuth(request,env);return json(await enableCloud(env));}
+  if(path==="/api/cloud-credentials" && method==="POST") {await collectorAuth(request,env);const value=await body(request);return json(await saveCloudRecipe(env,value.source,value.recipe));}
   const hash=await sessionHash(request);
   const authenticated=env.TRIAL_AUTHENTICATED===true || !!(await db.prepare("SELECT 1 FROM sessions WHERE hash=? AND expires>?").bind(hash,Date.now()).first());
   if(path==="/api/session" && method==="GET") return json({authenticated});
