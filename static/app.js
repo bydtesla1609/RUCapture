@@ -398,7 +398,7 @@ function taskSourceLink(task) {
   return task.source_url?externalLink(task.source?.startsWith("ruc_")?"教务原页面 ↗":"查看原作业 ↗",task.source_url):null;
 }
 function taskQuadrantBadge(task){
-  if(task.archived_at || typeof quadrantPositions==="undefined")return null;
+  if(task.category==="课程" || task.archived_at || typeof quadrantPositions==="undefined")return null;
   const p=quadrantPositions[task.id],name=p?.x!=null?quadrantOf(p.x,p.y)?.title:null;
   if(!name)return null;
   const badge=element("span",name,"task-quadrant");badge.dataset.quadrant=name;return badge;

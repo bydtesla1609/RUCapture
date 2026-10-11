@@ -110,7 +110,15 @@ try{
   assert.ok(await page.locator('.planning-list').evaluate(el=>el.scrollHeight>el.clientHeight),'overflow stays inside the inbox');
   assert.deepEqual(await page.locator('.planning-list .compact-task-info strong').allTextContents(),['待安排1','待安排2','待安排3','待安排4','待安排5','待安排6','待安排7','待安排8','待安排9','待安排10','待安排11','高等数学练习','待安排12']);
   await mkdir('data/screenshots',{recursive:true});await page.screenshot({path:'data/screenshots/planning-desktop.png',fullPage:true});
-  await page.locator('#focus-button').click();await page.locator('#focus-settings').waitFor({state:'visible'});await page.locator('#focus-settings').waitFor({state:'visible'});
+  await page.evaluate(()=>{
+    const course=tasks.find(task=>task.category==='课程');
+    localStorage.setItem(focusDraftKey(),JSON.stringify({session_id:null,record:{title:'旧草稿',content:'保留填写的信息'},task_ids:[course.id],duration_seconds:1500}));focusDraft=null;
+  });
+  await page.locator('#focus-button').click();await page.locator('#focus-settings').waitFor({state:'visible'});
+  assert.equal(await page.locator('#focus-tasks [data-category="课程"]').count(),0,'courses cannot be selected or restored from a draft');
+  assert.deepEqual(await page.evaluate(()=>focusDraft.task_ids),[]);
+  assert.equal(await page.locator('#task-content').inputValue(),'保留填写的信息');
+  await page.evaluate(()=>{focusDraft.record.title=focusDefaultTitle();renderFocusInformation();});
   const ordered=(await page.locator('#focus-tasks .compact-task-info strong').allTextContents()).filter(t=>t.startsWith('顺序'));
   assert.deepEqual(ordered,[1,2,3,4].flatMap(i=>['考试','作业','会议','活动','记录'].map(type=>`顺序${i}-${type}`)));
   assert.equal(await page.locator('#task-location').isVisible(),false);assert.equal(await page.locator('#record-time').isVisible(),false);assert.equal(await page.locator('#focus-tools,#focus-new').count(),0);

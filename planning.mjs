@@ -9,7 +9,7 @@ export async function pruneFocus(db,time=Date.now()) {
   await db.prepare("DELETE FROM settings WHERE key LIKE 'focus:%' AND json_extract(value,'$.ends_at')<=?").bind(new Date(time-7*86400000).toISOString()).run();
 }
 export async function planningState(db) {
-  const {results}=await db.prepare("SELECT key,value FROM settings WHERE key LIKE 'quadrant:%'").all();
+  const {results}=await db.prepare("SELECT key,value FROM settings WHERE key LIKE 'quadrant:%' AND EXISTS(SELECT 1 FROM tasks WHERE id=substr(settings.key,10) AND category<>'课程')").all();
   return Object.fromEntries(results.map(row=>[row.key.slice(9),JSON.parse(row.value)]));
 }
 export async function planningRoute(request,db,{body,validate,fileReferences,FIELDS,stored}) {
@@ -29,6 +29,7 @@ export async function planningRoute(request,db,{body,validate,fileReferences,FIE
   if(!/^\/api\/focus(?:\/|$)/.test(path))return null;
   await pruneFocus(db);
   async function expose(value) {
+    value={...value,selected:value.selected.filter(task=>task.category!=="课程")};
     const files=await fileReferences(value.record.attachments,db);
     const status=state(value);
     return {...value,state:status,finalized:value.state==="finished" || !value.state && status==="finished",duration_seconds:duration(value),remaining_ms:status==="finished"?0:remaining(value),focused_seconds:value.focused_seconds ?? (status==="finished"?duration(value):Math.max(0,(duration(value)*1000-remaining(value))/1000)),record:{...value.record,starts_at:value.ends_at,ends_at:value.ends_at,location:"",attachments:[...files.values()]},finished:status==="finished"};
@@ -42,7 +43,7 @@ export async function planningRoute(request,db,{body,validate,fileReferences,FIE
   let previous;
   if(match){
     const row=await db.prepare("SELECT value FROM settings WHERE key=?").bind(`focus:${match[1]}`).first();
-    if(!row)fail(404,"专注记录已删除或已超过七天");previous=JSON.parse(row.value);
+    if(!row)fail(404,"专注记录已删除或已超过七天");previous=JSON.parse(row.value);previous.selected=previous.selected.filter(task=>task.category!=="课程");
     if(!Number.isInteger(data.revision) || data.revision!==previous.revision)fail(409,"专注信息已在另一页面更新，请重新打开");
   }
   async function update(value){
@@ -59,7 +60,7 @@ export async function planningRoute(request,db,{body,validate,fileReferences,FIE
     // An in-progress draft may refer to a card completed or removed during this focus.
     const {results:available}=await db.prepare(`SELECT id,title,category,status,due_at,starts_at,ends_at,completed_at FROM tasks WHERE id IN (SELECT value FROM json_each(?))${previous?"":" AND deleted=0 AND archived_at IS NULL AND status<>'done'"}`).bind(JSON.stringify(ids)).all();
     const byId=new Map([...(previous?.selected || []),...available].map(task=>[task.id,task]));
-    const selected=ids.map(id=>{const task=byId.get(id);if(!task)fail(400,"所选卡片已完成或不存在，请重新选择");return task;});
+    const selected=ids.map(id=>{const task=byId.get(id);if(!task)fail(400,"所选卡片已完成或不存在，请重新选择");if(task.category==="课程")fail(400,"课程不能加入专注，请选择作业、考试、会议、活动或记录");return task;});
     return {record,selected};
   }
   if(["/pause","/resume","/finish"].includes(match?.[2]) && method==="POST"){

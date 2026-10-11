@@ -266,12 +266,13 @@ function renderFocusClock(seconds,locked){
 }
 function focusTaskOrder(a,b){
   const rank=task=>{const p=quadrantPositions[task.id],q=p?.x!=null?QUADRANTS.indexOf(quadrantOf(p.x,p.y)):-1;return q<0?4:q;};
-  const types=["考试","作业","会议","活动","课程","记录"];
+  const types=["考试","作业","会议","活动","记录"];
   return rank(a)-rank(b) || types.indexOf(a.category)-types.indexOf(b.category) || byPlanningTime(a,b);
 }
 function renderFocusInformation(){
-  const item=activeFocus(),draft=ensureFocusDraft(item),selected=new Set(draft.task_ids),available=new Map(tasks.filter(task=>task.status!=="done" && !task.archived_at).map(task=>[task.id,task]));
-  for(const task of [...tasks.filter(task=>selected.has(task.id)),...(item?.selected || [])])if(!available.has(task.id))available.set(task.id,task);
+  const item=activeFocus(),draft=ensureFocusDraft(item),selected=new Set(draft.task_ids),available=new Map(pendingCards().map(task=>[task.id,task]));
+  for(const task of [...tasks.filter(task=>selected.has(task.id)),...(item?.selected || [])])if(task.category!=="课程" && !available.has(task.id))available.set(task.id,task);
+  draft.task_ids=draft.task_ids.filter(id=>available.has(id));storeFocusDraft();
   $("task-title").value=draft.record.title;$("task-content").value=draft.record.content;
   $("focus-tasks").replaceChildren(...[...available.values()].sort(focusTaskOrder).map(task=>{
     const row=element("label",null,"focus-choice"),checkbox=element("input");row.dataset.category=task.category;checkbox.type="checkbox";checkbox.value=task.id;checkbox.checked=selected.has(task.id);row.append(checkbox,compactCard(task,true));return row;
