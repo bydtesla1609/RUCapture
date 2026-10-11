@@ -1,6 +1,114 @@
 "use strict";
 let messageReady=false,startupMessageShown=false,releaseState=null,announcementState=null,noticeSnapshot=null;
 let chatTarget=null,chatMessages=[],chatMore=false,chatSequence=0,chatBusy=false,chatPending=null,communityUnread=0;
+// Original encouragements; no quotation attribution and no saved summary snapshots.
+const DAILY_ENCOURAGEMENTS=[
+  "把一件事做完，就给心里腾出了一点位置。",
+  "今天的这一小步，也算数。",
+  "不用每一天都很耀眼，走过的路不会白走。",
+  "慢一点也没关系，你有自己的步速。",
+  "把目光从还没做的事上移开一会儿，看看已经走过的路。",
+  "能开始，已经不容易；能回来继续，也很了不起。",
+  "先照顾好自己，再去照顾那些计划。",
+  "暂时没有答案的题，明天也可以接着想。",
+  "一页笔记、一段阅读，都是给未来留下的线索。",
+  "别急着否定今天，你做过的努力不只在这张清单里。",
+  "有时候，认真吃饭、好好睡觉，就是最重要的进展。",
+  "没有人规定，成长一定要轰轰烈烈。",
+  "给自己一点耐心，很多变化正在慢慢发生。",
+  "你不需要和别人的进度条对齐。",
+  "今天认真做过的事，会在某个时刻帮到你。",
+  "把难题拆小一点，也把对自己的要求放温柔一点。",
+  "偶尔停下来，不等于放弃向前。",
+  "能把注意力收回来一次，就是一次练习。",
+  "路还很长，留点力气给沿途的风景。",
+  "做完这一段，记得站起来看看窗外。",
+  "不是所有收获都能立刻打上勾，但它们依然存在。",
+  "你可以有目标，也可以有不赶路的晚上。",
+  "今天遇到的困难，不是对你能力的最终评价。",
+  "一时没做好，不妨碍下一次做得更好。",
+  "把今天收好，明天再翻开新的一页。",
+  "能把模糊的想法写下来，就已经离它近了一点。",
+  "不必一次想清楚整条路，先走到下一盏灯下。",
+  "你认真生活的样子，不需要一张满分答卷来证明。",
+  "完成后的那口气，可以慢慢呼出来。",
+  "今天的自己，值得一句辛苦了。",
+  "把进步看小一点，你会发现它其实常常发生。",
+  "喜欢的事可以慢慢来，值得的人也包括你自己。",
+  "一次练习可能很普通，许多次练习会留下变化。",
+  "不顺利的日子，也可以有一个温柔的结尾。",
+  "允许自己边走边学，没有谁一开始就全都会。",
+  "给努力一点时间，也给生活一点空白。",
+  "从图书馆走回宿舍的路上，记得抬头看看天。",
+  "交掉一份作业，也别忘了给自己一点小小的奖励。",
+  "困住你的那道题，不会定义整个学期。",
+  "能和昨天的自己多懂一点点，就很好。",
+  "清单可以很长，今天只需要走好今天这一段。",
+  "你值得休息，不必先把所有事情都做完。",
+  "在忙碌里给自己留一个能喘气的角落。",
+  "别只记得赶路，也记得你为什么出发。",
+  "小小的坚持，也是认真回答生活的一种方式。",
+  "把注意力放回眼前，一次只做一件事。",
+  "生活不只有截止时间，还有值得期待的下一顿饭。",
+  "一段用心的时间，不会因为结果普通就失去意义。",
+  "今天不够顺利的话，明天还有重新安排的机会。",
+  "此刻能做的已经做了，剩下的慢慢来。"
+];
+let dailySummaryDay="",dailySummarySeen="",dailyAutoAttempted="",dailySummarySequence=0,dailySummaryPeriod="today",dailySummaryAutomatic=false,lastEncouragement=-1;
+function resetDailySummary(){
+  dailySummarySequence++;dailySummaryDay=dailySummarySeen=dailyAutoAttempted="";
+  $("daily-summary-content").replaceChildren();$("daily-summary-date").textContent=$("daily-summary-error").textContent="";
+}
+function applyDailySummaryStatus(data){
+  if(!data.server_time)return;
+  dailySummaryDay=localInput(data.server_time).slice(0,10);dailySummarySeen=data.summary_seen_date || "";
+}
+function maybeDailySummary(){
+  if(!dailySummaryDay || dailySummarySeen>=dailySummaryDay || dailyAutoAttempted===dailySummaryDay)return false;
+  dailyAutoAttempted=dailySummaryDay;openDailySummary("yesterday",true);return true;
+}
+function dailyEncouragement(){
+  const index=(lastEncouragement+1+Math.floor(Math.random()*(DAILY_ENCOURAGEMENTS.length-1)))%DAILY_ENCOURAGEMENTS.length;
+  lastEncouragement=index;return DAILY_ENCOURAGEMENTS[index];
+}
+async function openDailySummary(period="today",automatic=false){
+  const session=syncSession,sequence=++dailySummarySequence,dialog=$("daily-summary-dialog");
+  dailySummaryPeriod=period;dailySummaryAutomatic=automatic;
+  $("daily-summary-title").textContent=period==="today"?"今日总结":"昨日总结";
+  $("daily-summary-date").textContent="正在整理这一天完成的事…";
+  $("daily-summary-content").replaceChildren();$("daily-summary-error").textContent="";$("daily-summary-retry").hidden=true;
+  if(!dialog.open)dialog.showModal();
+  try{
+    const data=await api(`/api/daily-summary?period=${period}`);
+    if(session!==syncSession || sequence!==dailySummarySequence || !dialog.open)return;
+    $("daily-summary-date").textContent=`${data.day.replaceAll("-"," / ")} · 北京时间 00:00 起${period==="today"?`，截至 ${localInput(data.generated_at).slice(11,16)}`:"，全天"}`;
+    const records=data.tasks.filter(task=>task.category==="记录").length,completed=data.tasks.length-records;
+    const total=element("p",null,"daily-summary-total");
+    total.append(element("strong",String(completed || records)),document.createTextNode(!completed && records?"条记录已完善":"项已完成"));
+    if(completed && records)total.append(element("small",`另有 ${records} 条记录已完善`));
+    const quote=element("p",dailyEncouragement(),"daily-summary-quote"),list=element("ol",null,"daily-summary-list");
+    for(const task of data.tasks){
+      const row=element("li",null,"daily-summary-row"),time=element("time",localInput(task.completed_at).slice(11,16)),body=element("div"),meta=element("div",null,"daily-summary-meta");
+      time.dateTime=task.completed_at;
+      meta.append(element("span",task.category,`tag cat-${CATEGORIES.indexOf(task.category)}`));
+      if(task.category==="记录")meta.append(element("span","已完善"));
+      if(task.archived_at)meta.append(element("span","已归档"));
+      body.append(meta,element("strong",task.title));row.append(time,body);list.append(row);
+    }
+    $("daily-summary-content").append(total,quote,data.tasks.length?list:element("p","这一天还没有标记完成的卡片。休息、尝试和慢慢推进，也都是一天的一部分。","daily-summary-empty"));
+    if(automatic){
+      dailySummarySeen=data.today;
+      try{await api("/api/daily-summary/seen","POST",{day:data.today});}
+      catch(error){if(session===syncSession && sequence===dailySummarySequence && dialog.open)$("daily-summary-error").textContent="总结已读取，跨设备的已读状态暂未同步，下次可能再次出现。";}
+    }
+  }catch(error){
+    if(session!==syncSession || sequence!==dailySummarySequence || !dialog.open)return;
+    $("daily-summary-date").textContent="暂时没能读取完成记录";$("daily-summary-error").textContent=error.message;$("daily-summary-retry").hidden=false;
+  }
+}
+$("daily-summary-button").onclick=()=>openDailySummary();
+$("daily-summary-retry").onclick=()=>openDailySummary(dailySummaryPeriod,dailySummaryAutomatic);
+$("daily-summary-dialog").addEventListener("close",()=>{dailySummarySequence++;$("daily-summary-content").replaceChildren();queueMicrotask(maybeDemo);});
 function resetMessages(){
   messageReady=false;startupMessageShown=false;releaseState=announcementState=noticeSnapshot=null;
   chatSequence++;chatTarget=null;chatMessages=[];chatMore=false;chatPending=null;chatBusy=false;communityUnread=0;
@@ -17,7 +125,7 @@ async function startMessages(){
   $("feedback-button").hidden=!trialMode;$("feedback-button").querySelector("span").textContent=isAdmin?"公告与答疑":"与管理员反馈";
   $("feedback-title").textContent=isAdmin?"公告与答疑":"与管理员反馈";
   $("feedback-dialog").classList.toggle("admin-chat",isAdmin);$("messages-error").textContent="";
-  const results=await Promise.allSettled([api("/api/notices"),trialMode?api("/api/announcements"):Promise.resolve({announcements:[],last_read:0}),checkCloud()]);
+  const results=await Promise.allSettled([api("/api/notices"),trialMode?api("/api/announcements"):Promise.resolve({announcements:[],last_read:0}),checkCloud(),checkCollector()]);
   if(session!==syncSession || $("workspace").hidden)return;
   releaseState=results[0].status==="fulfilled"?results[0].value:null;
   announcementState=results[1].status==="fulfilled"?results[1].value:null;
@@ -32,7 +140,8 @@ function soonTasks(){
 }
 function unreadAnnouncements(){return (announcementState?.announcements || []).filter(a=>a.id>(announcementState?.last_read || 0));}
 function maybeMessageBoard(){
-  if(!messageReady || startupMessageShown || document.hidden || $("workspace").hidden || document.querySelector("dialog[open]") || hasDraft())return;
+  if(!messageReady || document.hidden || $("workspace").hidden || document.querySelector("dialog[open]") || hasDraft())return;
+  if(maybeDailySummary() || startupMessageShown)return;
   startupMessageShown=true;
   if(releaseState?.unread || expiredSources().length || soonTasks().length || unreadAnnouncements().length || communityUnread){renderMessages(false);$("messages-dialog").showModal();}
 }
@@ -69,9 +178,13 @@ $("messages-read").onclick=async()=>{
   try{if(snapshot?.version)await api("/api/notices/read","POST",{version:snapshot.version});if(trialMode&&snapshot?.announcement)await api("/api/announcements/read","POST",{last_id:snapshot.announcement});if(session!==syncSession)return;if(releaseState)releaseState.unread=false;if(announcementState)announcementState.last_read=snapshot?.announcement || announcementState.last_read;$("messages-dialog").close();maybeDemo();}
   catch(error){$("messages-error").textContent=error.message;}finally{$("messages-read").disabled=false;}
 };
+function applyCommunityUnread(total){
+  communityUnread=total;$("feedback-unread").textContent=total>99?"99+":String(total);
+  $("feedback-unread").hidden=!total;$("user-unread").hidden=!total;maybeMessageBoard();
+}
 async function refreshCommunityUnread(){
   if(!trialMode || $("workspace").hidden)return;const session=syncSession;
-  try{const data=await api("/api/feedback/unread");if(session!==syncSession)return;communityUnread=data.total;$("feedback-unread").textContent=data.total>99?"99+":String(data.total);$("feedback-unread").hidden=!data.total;$("user-unread").hidden=!data.total;maybeMessageBoard();}catch{}
+  try{const data=await api("/api/feedback/unread");if(session!==syncSession)return;applyCommunityUnread(data.total);}catch{}
 }
 async function openChat(){
   if(!trialMode)return;$("chat-error").textContent="";$("feedback-dialog").dataset.active=isAdmin?"false":"true";$("feedback-dialog").showModal();
@@ -129,7 +242,7 @@ $("chat-form").onsubmit=async event=>{
 let lastCommunityPoll=0,chatPolling=false;
 setInterval(async()=>{
   if(!trialMode||document.hidden||$("workspace").hidden||chatPolling)return;
-  if(!$("feedback-dialog").open && Date.now()-lastCommunityPoll<60000)return;
+  if(!$("feedback-dialog").open)return;
   lastCommunityPoll=Date.now();chatPolling=true;
   try{if($("feedback-dialog").open){await loadChat();if(isAdmin)await loadThreads();}await refreshCommunityUnread();}finally{chatPolling=false;}
 },6000);

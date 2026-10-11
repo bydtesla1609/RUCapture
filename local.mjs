@@ -4,6 +4,7 @@ import {fileURLToPath} from "node:url";
 import {join,dirname,resolve} from "node:path";
 import {createServer} from "node:http";
 import {randomBytes} from "node:crypto";
+import {syncSchema} from "./sync.mjs";
 import worker, {digest} from "./worker.mjs";
 
 const root=dirname(fileURLToPath(import.meta.url));
@@ -61,13 +62,14 @@ export async function createEnvironment(dataDir, password) {
   if(!database.prepare("PRAGMA table_info(tasks)").all().some(column=>column.name==="axis_id")){
     database.exec("BEGIN");try{database.exec(await readFile(join(root,"migrations/0008_capture.sql"),"utf8"));database.exec("COMMIT");}catch(error){database.exec("ROLLBACK");database.close();throw error;}
   }
+  database.exec(syncSchema());
   const keyFile=join(dataDir,"access-code.txt");
   let key=password;
   if(!key){try{key=(await readFile(keyFile,"utf8")).trim();}catch{key=randomBytes(18).toString("base64url");await writeFile(keyFile,key,{mode:0o600});}}
   const env={DB:sqliteBinding(database),BOARD_PASSWORD_HASH:await digest(key),ASSETS:{async fetch(request){
     const pathname=new URL(request.url).pathname;
     const name=pathname==="/" ? "index.html" : pathname.slice(1);
-    if(!["index.html","app.js","capture.js","axis-layout.js","messages.js","style.css","icon.svg","extension.zip"].includes(name)) return new Response("Not found",{status:404});
+    if(!["index.html","app.js","capture.js","planning.js","axis-layout.js","messages.js","style.css","effects.css","icon.svg","extension.zip"].includes(name)) return new Response("Not found",{status:404});
     const mime={html:"text/html; charset=utf-8",js:"text/javascript; charset=utf-8",css:"text/css; charset=utf-8",svg:"image/svg+xml",zip:"application/zip"};
     return new Response(await readFile(join(root,"static",name)),{headers:{"Content-Type":mime[name.split(".").pop()]}});
   }}};

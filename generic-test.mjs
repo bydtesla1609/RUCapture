@@ -48,7 +48,9 @@ test("generic extension requires per-origin permission, preview approval and the
   await assert.rejects(call,/预览确认/);assert.equal(posts.length,0);
   context.msg.confirmed=true;await call();assert.equal(posts.length,1);assert.ok(!JSON.stringify(posts).includes("never-upload"));
   for(const saved of Object.values(stored.genericRules))saved.fields=Object.fromEntries(Object.entries(saved.fields).reverse());
-  context.msg.confirmed=false;await call();assert.deepEqual(posts[1].tasks,[],"unchanged tasks reuse import cache");
+  context.msg.confirmed=false;await call();assert.equal(posts.length,1,"unchanged tasks do not upload another heartbeat");
+  context.msg.tasks=[{...task,status:'doing'}];await call();assert.equal(posts.at(-1).tasks[0].status,'doing');
+  context.msg.tasks=[];context.msg.empty=true;await call();assert.equal(posts.at(-1).task_count,0);assert.deepEqual(posts.at(-1).tasks,[]);
   allowed=false;await assert.rejects(call,/撤销/);allowed=true;
   stored.account="bob";await assert.rejects(call,/账号已切换/);stored.account="alice";
   context.msg.tasks=[{...task,stable:false}];await assert.rejects(call,/稳定链接/);

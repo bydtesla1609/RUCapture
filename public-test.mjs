@@ -65,11 +65,11 @@ test('saved axis layout is per-account and revision guarded, including all node 
   }finally{database.close();}
 });
 
-test('cloud dispatcher distributes active accounts over 30 minutes and internal endpoint rejects public calls',async()=>{
+test('cloud dispatcher distributes active accounts over 60 minutes and internal endpoint rejects public calls',async()=>{
   const {database,env,client}=await trialFixture();try{
     for(const slot of [1,31,121,211,300])database.prepare("INSERT INTO trial_users(id,slot,username,status,created_at) VALUES (?,?,?,'active',0)").run('user-'+slot,slot,'cloud_'+slot);
     const seen=[];env.CLOUD_ENCRYPTION_KEY='12'.repeat(32);env.CLOUD_DISPATCH={async fetch(request){seen.push(Number(new URL(request.url).pathname.split('/').at(-1)));assert.match(request.headers.get('X-Sync-Signature'),/^[a-f0-9]{64}$/);return Response.json({ok:true});}};
-    for(let minute=0;minute<30;minute++)await runTrialCloud(env,minute*60000);
+    for(let minute=0;minute<60;minute++)await runTrialCloud(env,minute*60000);
     assert.deepEqual(seen.sort((a,b)=>a-b),[1,31,121,211,300]);
     assert.equal((await trial.fetch(new Request('https://rucapture.pages.dev/internal/sync/1',{method:'POST'}),env)).status,404);
     assert.equal((await client().api('/api/board')).status,401);

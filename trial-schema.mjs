@@ -1,3 +1,4 @@
+import {syncSchema} from "./sync.mjs";
 import {COMMUNITY_SCHEMA} from "./community.mjs";
 // Bounded to 300 accounts across four databases, each below the free 500 MB limit.
 export const TRIAL_SLOTS=300;
@@ -45,5 +46,6 @@ CREATE TABLE IF NOT EXISTS ${p}settings (key TEXT PRIMARY KEY,value TEXT NOT NUL
 CREATE TABLE IF NOT EXISTS ${p}files (id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL,size INTEGER NOT NULL CHECK(size>0),created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS ${p}file_chunks (file_id TEXT NOT NULL REFERENCES ${p}files(id) ON DELETE CASCADE,part INTEGER NOT NULL,data BLOB NOT NULL,PRIMARY KEY(file_id,part));`);
   }
+  for(let slot=start;slot<=end;slot++)sql.push(syncSchema(`u${slot}_`));
   return sql.join("\n");
 }

@@ -1,13 +1,16 @@
 "use strict";
 const $ = id => document.getElementById(id);
 const CATEGORIES = ["作业", "课程", "考试", "活动", "会议", "记录"];
+const CALENDAR_TYPES=["考试","作业","会议","活动","课程","记录"];
+let calendarTypes=new Set(CALENDAR_TYPES);
 const NAV_CATEGORIES=CATEGORIES.filter(category=>category!=="课程");
 let savedAxisLayout=null,axisLayoutRevision=0;
 let axes=[],axisItems=[],overviewView="calendar",newTaskAxis=null,newTaskCategory=null;
 const STATES = {todo: "待开始", doing: "进行中", done: "已完成"};
 let tasks = [], sources = [], categoryFilter = "全部", editing = null, deleting = null;
+let syncRevision=null,syncBusy=false,lastFullSync=0;
 let refreshSequence = 0, lastPayload = "", toastTimer, taskCategory = "作业", draftTodos = [];
-let draftAttachments = [], uploading = false;
+let draftAttachments = [], uploading = false, draftTaskId=null;
 let timetables=[], courseSemester=null, courseWeek="all";
 let collectorState=null, cloudState=null, syncing=false;
 let syncSession=0, cloudCheckSequence=0, collectorCheckSequence=0, lastCloudCheck=0;
@@ -17,10 +20,30 @@ let publicRegistration=false;
 let authMode="login", accountName="", registrationOpen=false, isAdmin=false;
 let editingWebsite=-1, websiteBusy=false;
 let syncStep=1,syncVisited=1,syncExecuted=false,cloudPanelLoading=false;
-const syncGuideVersion=document.getElementById("app-version").textContent+":1.9.3";
+const syncGuideVersion=document.getElementById("app-version").textContent+":1.9.5";
 let archiveCategory="全部", archiveItems=[], archiveTotal=0, archiveSequence=0;
 let selectedDay = localInput(new Date()).slice(0,10), calendarMonth = selectedDay.slice(0,7);
 
+
+let effectsSaving=false,effectsTransition=null,effectsFadeTimer;
+function applyEffects(enabled,animate=false){
+  const mode=enabled?"on":"off",root=document.documentElement;
+  clearTimeout(effectsFadeTimer);effectsTransition?.skipTransition();root.classList.remove("effects-fading");
+  const update=()=>{root.dataset.effects=mode;$("effects-toggle").setAttribute("aria-checked",String(enabled));$("effects-toggle").querySelector(".effects-status").textContent=enabled?"开":"关";};
+  if(root.dataset.effects===mode){update();return;}
+  if(animate && !matchMedia("(prefers-reduced-motion: reduce)").matches){
+    if(document.startViewTransition){effectsTransition=document.startViewTransition(update);effectsTransition.ready.catch(()=>{});}
+    else {root.classList.add("effects-fading");effectsFadeTimer=setTimeout(()=>{update();root.classList.remove("effects-fading");},220);}
+  }else update();
+}
+$("effects-toggle").onclick=async()=>{
+  if(effectsSaving)return;
+  const enabled=document.documentElement.dataset.effects!=="off",session=syncSession;
+  effectsSaving=true;$("effects-toggle").disabled=true;applyEffects(!enabled,true);
+  try{await api("/api/preferences","PUT",{effects:!enabled});}
+  catch(error){if(session===syncSession){applyEffects(enabled,true);notice(error.message);}}
+  finally{effectsSaving=false;$("effects-toggle").disabled=false;}
+};
 function element(tag, text, className) {
   const node = document.createElement(tag);
   if (text !== null && text !== undefined) node.textContent = text;
@@ -51,20 +74,30 @@ function confirmAction(title,message,label="删除") {
     dialog.showModal();
   });
 }
-async function api(path, method = "GET", payload, timeout = 15000) {
-  const session=syncSession;
-  const response = await fetch(path, {method, cache: "no-store", headers: {"Content-Type": "application/json"},
-    ...(payload !== undefined ? {body: JSON.stringify(payload)} : {}), signal: AbortSignal.timeout(timeout)});
-  let data;
-  try { data = await response.json(); } catch { throw new Error("服务器暂时不可用，请稍后重试"); }
-  if (!response.ok) {
-    if (response.status === 401 && session===syncSession && !["/api/login","/api/register","/api/recover","/api/recovery-code"].includes(path)) showLogin();
-    throw Object.assign(new Error(data.error || "请求未完成，请重试"), {status: response.status});
+async function api(path, method="GET", payload, timeout=45000) {
+  const session=syncSession,canRetry=method==="GET" || method==="POST" && path==="/api/tasks" && payload?.id;
+  for(let attempt=0;attempt<2;attempt++){
+    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);
+    try{
+      const response=await fetch(path,{method,cache:"no-store",headers:{"Content-Type":"application/json"},...(payload!==undefined?{body:JSON.stringify(payload)}:{}),signal:controller.signal});
+      const data=await response.json().catch(error=>{if(controller.signal.aborted)throw error;throw new Error("服务器暂时不可用，请稍后重试");});
+      if(!response.ok){
+        if(response.status===401 && session===syncSession && !["/api/login","/api/register","/api/recover","/api/recovery-code"].includes(path))showLogin();
+        throw Object.assign(new Error(data.error || "请求未完成，请重试"),{status:response.status});
+      }
+      return data;
+    }catch(error){
+      const network=controller.signal.aborted || error.name==="AbortError" || error instanceof TypeError;
+      if(network && canRetry && !attempt && session===syncSession && navigator.onLine)continue;
+      if(network)throw new Error(method==="GET"?"连接暂时中断，请稍后刷新。": "网络连接中断，请重试。填写的内容仍保留在这里。");
+      throw error;
+    }finally{clearTimeout(timer);}
   }
-  return data;
 }
 function showLogin() {
-  refreshSequence++;closeUserMenu();
+  if(typeof resetDailySummary==="function")resetDailySummary();
+  if(typeof resetPlanning==="function")resetPlanning();
+  refreshSequence++;syncRevision=null;lastFullSync=0;closeUserMenu();
   if(typeof resetMessages==="function")resetMessages();
   syncSession++;lastCloudCheck=0;loginRemindersSeen.clear();
   $("expired-sites").replaceChildren();
@@ -76,7 +109,7 @@ function showLogin() {
   $("board").replaceChildren(); $("sources-list").replaceChildren(); collectorState=null; cloudState=null;
   sourceLinksState=null;if(trialMode)boardAccount="";
   syncStep=syncVisited=1;syncExecuted=false;cloudPanelLoading=false;$("cloud-panel").replaceChildren();
-  editing=null;deleting=null;draftTodos=[];draftAttachments=[];
+  editing=null;deleting=null;draftTodos=[];draftAttachments=[];calendarTypes=new Set(CALENDAR_TYPES);
   $("task-form").reset();$("task-todos").replaceChildren();$("task-links").replaceChildren();$("task-attachments").replaceChildren();$("source-url").value="";$("website-list").replaceChildren();$("source-links-form").hidden=true;$("recovery-value").textContent="";$("account-password").value="";
 }
 function formatTime(value, includeYear = false) {
@@ -133,17 +166,23 @@ $("attachment-input").onchange=async () => {
     for (const [index,file] of selected.entries()) {
       $("upload-state").textContent=`正在上传 ${index+1}/${selected.length}：${file.name}`;
       const form=new FormData(); form.set("file",file);
-      const response=await fetch("/api/files",{method:"POST",body:form,signal:AbortSignal.timeout(120000)});
-      let data; try { data=await response.json(); } catch { throw new Error("文件上传失败，请重试"); }
-      if (!response.ok) throw new Error(data.error || "文件上传失败，请重试");
-      draftAttachments.push({...data,pending:true}); renderAttachments();
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
+      try {
+        const response=await fetch("/api/files",{method:"POST",body:form,signal:controller.signal});
+        let data; try { data=await response.json(); } catch { throw new Error("文件上传失败，请重试"); }
+        if (!response.ok) throw new Error(data.error || "文件上传失败，请重试");
+        draftAttachments.push({...data,pending:true}); renderAttachments();
+      }catch(error){
+        if(controller.signal.aborted || error.name==="AbortError" || error instanceof TypeError)throw new Error("上传连接中断，请重新选择未上传的文件。卡片内容已保留。");
+        throw error;
+      }finally{clearTimeout(timer);}
     }
     $("upload-state").textContent="上传完成，保存任务后即可在所有设备打开。";
   } catch (error) { $("task-error").textContent=error.message; $("upload-state").textContent="未上传成功的文件可重新选择，已上传部分会保留。"; }
   finally { uploading=false; $("save-task").disabled=false; $("attachment-input").disabled=false; $("attachment-input").value=""; $("task-dialog").querySelectorAll(".close-dialog").forEach(button=>button.disabled=false); renderAttachments(); }
 };
 $("task-dialog").addEventListener("cancel",event=>{if(uploading) event.preventDefault();});
-function hasDraft() { return !!document.querySelector("#board [data-dirty], #board [data-busy], #board .dragging, #course-detail [data-dirty], #course-detail [data-busy], #course-detail .dragging"); }
+function hasDraft() { return !!$("board").dataset.busy || !!document.querySelector("#board [data-dirty], #board [data-busy], #board .dragging, #board .camera-moving, #course-detail [data-dirty], #course-detail [data-busy], #course-detail .dragging, #focus-history [data-dirty], #focus-history [data-busy]"); }
 function checklist(initial, persist, inDialog = false) {
   const root = element("div", null, "checklist");
   let items = structuredClone(initial), saved = structuredClone(initial), editingId = null, adding = "", pendingCommit=false;
@@ -265,10 +304,11 @@ function checklist(initial, persist, inDialog = false) {
         const text = element("button", item.text, "todo-text"); text.type = "button"; text.title = "点击编辑";
         text.setAttribute("aria-label", `编辑待办：${item.text}`);
         text.onclick = () => { if(root.dataset.busy)return;editingId = item.id; draw(); markDirty(); list.querySelector(".todo-edit").focus(); };
-        const remove = element("button", "×", "todo-action"); remove.type = "button"; remove.setAttribute("aria-label", `删除待办：${item.text}`);
-        remove.onclick = async () => { if(root.dataset.busy)return;if(!await confirmAction("删除这条待办？",item.text))return;if(root.dataset.busy || !root.isConnected)return;items = items.filter(value => value.id !== item.id); commit(); };
-        row.append(text, remove);
+        row.append(text);
       }
+      const remove = element("button", "×", "todo-action"); remove.type = "button"; remove.setAttribute("aria-label", `删除待办：${item.text}`);
+      remove.onclick = async () => { if(root.dataset.busy)return;if(!await confirmAction("删除这条待办？",item.text))return;if(root.dataset.busy || !root.isConnected)return;items = items.filter(value => value.id !== item.id);if(editingId===item.id)editingId=null;commit(); };
+      row.append(remove);
       if (editingId && editingId !== item.id) row.querySelectorAll("button,input").forEach(node => node.disabled = true);
       return row;
     }));
@@ -286,13 +326,16 @@ function navigationIcon(category) {
     "活动":"m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z",
     "记录":"M4 3h12l4 4v14H4z M8 10h8 M8 14h8 M8 18h5",
     "会议":"M15 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M5 21v-2a7 7 0 0 1 14 0v2 M19 7a3 3 0 0 1 0 6 M22 20v-2a5 5 0 0 0-3-4",
+    "灯光":"M9 18h6 M10 21h4 M8 14a6 6 0 1 1 8 0l-1 2H9z M12 1v1 M3 5l1 1 M20 6l1-1",
+    "总结":"M4 5h16v16H4z M8 3v4 M16 3v4 M4 10h16 M8 15l3 3 5-5",
     "消息":"M18 8a6 6 0 0 0-12 0v5l-2 4h16l-2-4z M10 21h4",
     "反馈":"M4 4h16v12H9l-5 4z M8 8h8 M8 12h5",
     "归档":"M4 8h16v13H4z M3 3h18v5H3z M9 12h6",
     "账户":"M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21a8 8 0 0 1 16 0",
     "退出":"M9 3H4v18h5 M10 12h11 M17 8l4 4-4 4",
     "演示":"M9 7l8 5-8 5z M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
-    "同步":"M20 10a8 8 0 0 0-14-4L3 9 M3 4v5h5 M4 14a8 8 0 0 0 14 4l3-3 M21 20v-5h-5"
+    "同步":"M20 10a8 8 0 0 0-14-4L3 9 M3 4v5h5 M4 14a8 8 0 0 0 14 4l3-3 M21 20v-5h-5",
+    "专注":"M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0 M12 6v6l4 2"
   };
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg"),path=document.createElementNS(svg.namespaceURI,"path");
   svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("aria-hidden","true");svg.setAttribute("class",`nav-icon cat-${CATEGORIES.indexOf(category)}`);
@@ -323,9 +366,9 @@ function positionUserMenu(){
 $("user-menu").addEventListener("beforetoggle",event=>{
   $("user-menu-toggle").setAttribute("aria-expanded",String(event.newState==="open"));if(event.newState==="open")requestAnimationFrame(positionUserMenu);
 });
-$("user-menu").addEventListener("click",event=>{if(event.target.closest("button"))closeUserMenu();});
+$("user-menu").addEventListener("click",event=>{if(event.target.closest("button:not(#effects-toggle)"))closeUserMenu();});
 window.addEventListener("resize",positionUserMenu);document.addEventListener("scroll",positionUserMenu,true);
-for(const [id,icon] of [["demo-button","演示"],["sources-button","同步"],["messages-button","消息"],["feedback-button","反馈"],["archive-button","归档"],["account-button","账户"],["logout","退出"]])$(id).prepend(navigationIcon(icon));
+for(const [id,icon] of [["focus-button","专注"],["demo-button","演示"],["sources-button","同步"],["effects-toggle","灯光"],["daily-summary-button","总结"],["messages-button","消息"],["feedback-button","反馈"],["archive-button","归档"],["account-button","账户"],["logout","退出"]])$(id).prepend(navigationIcon(icon));
 function renderNavigation() {
   $("categories").replaceChildren(...["全部", ...NAV_CATEGORIES].map(category => {
     const button = element("button", null, "nav-button" + (categoryFilter === category ? " active" : ""));
@@ -354,12 +397,19 @@ function taskSourceLink(task) {
   if(task.category==="课程") {const url=syllabusURL(task);return url?externalLink("教学大纲 ↗",url):null;}
   return task.source_url?externalLink(task.source?.startsWith("ruc_")?"教务原页面 ↗":"查看原作业 ↗",task.source_url):null;
 }
+function taskQuadrantBadge(task){
+  if(task.archived_at || typeof quadrantPositions==="undefined")return null;
+  const p=quadrantPositions[task.id],name=p?.x!=null?quadrantOf(p.x,p.y)?.title:null;
+  if(!name)return null;
+  const badge=element("span",name,"task-quadrant");badge.dataset.quadrant=name;return badge;
+}
 function card(task) {
   const article = element("article", null, "task");
-  article.dataset.taskId = task.id;
+  article.dataset.taskId = task.id;article.dataset.category=task.category;
   const meta = element("div", null, "task-meta");
-  meta.append(element("span", task.category, `badge cat-${CATEGORIES.indexOf(task.category)}`),
-    element("span", task.source ? sources.find(s => s.id === task.source)?.name || task.source : "手动添加", "source-label"));
+  const kind=element("span",null,"task-kind"),quadrant=taskQuadrantBadge(task);
+  kind.append(element("span", task.category, `badge cat-${CATEGORIES.indexOf(task.category)}`));if(quadrant)kind.append(quadrant);
+  meta.append(kind,element("span", task.source ? sources.find(s => s.id === task.source)?.name || task.source : "手动添加", "source-label"));
   const title = element("h3", task.title, "task-title");
   article.append(meta, title);
   const isOverdue = task.category === "作业" && task.status !== "done" && deadline(task) && new Date(deadline(task)) < new Date();
@@ -369,7 +419,7 @@ function card(task) {
   if (task.category === "作业") time.append(element("p", formatTime(completedHomework ? task.completed_at : task.due_at, true)));
   else time.append(element("p", timeRange(task), "time-range"));
   article.append(time);
-  if(task.location)article.append(element("p", `⌖ ${task.location}`, "task-location"));
+  if(task.location && task.category!=="记录")article.append(element("p", `⌖ ${task.location}`, "task-location"));
   if(taskContent(task))article.append(element("p",taskContent(task),"task-content"));
   for(const [key,label] of [["teacher","教师"],["seat","座位"]])if(task.details?.[key])article.append(element("p",`${label} · ${task.details[key]}`,"event-detail"));
   if(task.details?.period)article.append(element("p",`第 ${task.details.week} 周 · ${task.details.period}`,"event-detail"));
@@ -397,7 +447,7 @@ function card(task) {
   };
   if(task.category==="作业")footer.append(status);
   else if(task.category!=="课程") {const label=element("label",null,"completion-control");label.append(status,document.createTextNode(task.category==="记录"?"已完善":"已完成"));footer.append(label);}
-  const footerMain=element("div",null,"task-footer-main");footerMain.append(...footer.childNodes);const original=taskSourceLink(task);if(original)footerMain.append(original);footer.append(footerMain);
+  const footerMain=element("div",null,"task-footer-main");footerMain.append(...footer.childNodes);const original=taskSourceLink(task);if(original){original.classList.add("task-original-link");meta.lastChild.append(original);}footer.append(footerMain);
   const actions = element("div", null, "task-actions");
   const edit = element("button", "编辑", "edit-task");
   edit.type = "button";
@@ -406,9 +456,9 @@ function card(task) {
   const remove = element("button", "删除", "delete-task");
   remove.type = "button";
   remove.setAttribute("aria-label", `删除：${task.title}`);
-  remove.onclick = () => { if (hasDraft()) { notice("请先保存或取消正在编辑的待办事项"); return; } deleting = task; $("delete-dialog").showModal(); };
+  remove.onclick = () => { if (hasDraft()) { notice("请先保存或取消正在编辑的待办事项"); return; } confirmCardDeletion(task); };
   const archive=element("button","归档","archive-task");archive.type="button";archive.setAttribute("aria-label",`归档：${task.title}`);archive.onclick=()=>archiveTask(task,true);
-  actions.append(edit,archive,remove); footer.append(actions);
+  actions.append(edit,archive,remove); footerMain.append(actions);
   let current = task;
   const list = checklist(task.todos, async todos => {
     current = await api(`/api/tasks/${task.id}`, "PATCH", {todos, revision: current.revision});
@@ -425,9 +475,13 @@ function card(task) {
   article.append(footer);
   return article;
 }
+function groupHeading(title,count) {
+  const heading=element("h2",null,"column-heading"),dot=element("span",null,"line");dot.setAttribute("aria-hidden","true");
+  heading.append(dot,element("span",title),element("span",String(count),"count"));return heading;
+}
 function render() {
   queueMicrotask(()=>document.querySelectorAll("select:not([data-enhanced])").forEach(enhanceSelect));
-  renderNavigation();
+  renderNavigation();$("workspace").dataset.category=categoryFilter;
   document.querySelector(".summary").hidden=false;
   document.querySelector(".summary").removeAttribute("data-schedule");
   const visible = tasks.filter(t => categoryFilter === "全部" || categoryFilter === t.category);
@@ -446,7 +500,7 @@ function render() {
   });
   $("overview-views").hidden=categoryFilter!=="全部";
   document.querySelectorAll("[data-view]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.view===overviewView)));
-  if(categoryFilter==="全部") {overviewView==="axes"?renderAxes():renderCalendar();renderSources();return;}
+  if(categoryFilter==="全部") {overviewView==="axes"?renderAxes():overviewView==="quadrants"?renderQuadrants():renderCalendar();renderSources();return;}
   if(categoryFilter==="记录") {renderRecords(visible);renderSources();return;}
   if(categoryFilter!=="作业") {renderSchedule(visible);renderSources();return;}
   $("board").replaceChildren(...Object.entries(STATES).map(([state, label]) => {
@@ -454,11 +508,9 @@ function render() {
     const matching = visible.filter(t => t.status === state).sort((a,b) => state==="done"
       ? (b.completed_at || b.updated_at).localeCompare(a.completed_at || a.updated_at) || b.id.localeCompare(a.id)
       : (deadline(a) || "9999").localeCompare(deadline(b) || "9999") || a.created_at.localeCompare(b.created_at));
-    const header = element("div", null, "column-heading");
-    header.append(element("span", null, "line"), element("h3", label), element("span", String(matching.length), "count"));
-    column.append(header);
-    if (matching.length) column.append(...matching.map(card));
-    else column.append(emptySchedule(label,"作业",state==="todo"));
+    column.append(groupHeading(label,matching.length));
+    const list=element("div",null,"schedule-list homework-group");
+    if(matching.length)list.append(...matching.map(card));else list.append(emptySchedule(label,"作业",state==="todo"));column.append(list);
     return column;
   }));
   renderSources();
@@ -556,8 +608,7 @@ function renderSchedule(visible) {
     ["按开始时间从近到远","未来一周开始的安排","全部时间均为北京时间","按完成时间倒序 · 满 7 天自动归档"]);
   const columns=element("div",null,"schedule-columns");
   for(const [label,items,state] of [["未完成",pending,"todo"],["已完成",done,"done"]]) {
-    const column=element("section",null,`column ${state}`),heading=element("h2",label);
-    heading.append(element("span",String(items.length),"count"));column.append(heading);
+    const column=element("section",null,`column ${state}`);column.append(groupHeading(label,items.length));
     const list=element("div",null,`schedule-list ${categoryFilter==="考试"?"exam-group":categoryFilter==="会议"?"meeting-group":"activity-group"}`);
     list.append(...items.map(card));if(!items.length)list.append(emptySchedule(label,categoryFilter,state==="todo" && ["活动","会议"].includes(categoryFilter)));column.append(list);columns.append(column);
   }
@@ -579,8 +630,31 @@ function calendarSelect(day) {
   if(hasDraft()) {notice("请先保存或取消正在编辑的待办事项");return;}
   selectedDay=day;if(day)calendarMonth=day.slice(0,7);renderCalendar();
 }
+const calendarEventTime=task=>task.category==="作业"?task.due_at:task.starts_at || task.ends_at;
+const calendarTypeOrder=(a,b)=>CALENDAR_TYPES.indexOf(a.category)-CALENDAR_TYPES.indexOf(b.category);
+// Lunar dates: Hong Kong Observatory official CSV tables, 2025–2027.
+// https://data.weather.gov.hk/weatherAPI/hko_data/calendar/nongli_calendar_2026.csv
+// Qingming: HKO Gregorian–Lunar PDF tables for each year. Labels are festivals, not leave/workday rules.
+const LUNAR_FESTIVALS={"2025-01-07":"腊八","2025-01-28":"除夕","2025-01-29":"春节","2025-02-12":"元宵","2025-04-04":"清明","2025-05-31":"端午","2025-08-29":"七夕","2025-10-06":"中秋","2025-10-29":"重阳","2026-01-26":"腊八","2026-02-16":"除夕","2026-02-17":"春节","2026-03-03":"元宵","2026-04-05":"清明","2026-06-19":"端午","2026-08-19":"七夕","2026-09-25":"中秋","2026-10-18":"重阳","2027-01-15":"腊八","2027-02-05":"除夕","2027-02-06":"春节","2027-02-20":"元宵","2027-04-05":"清明","2027-06-09":"端午","2027-08-08":"七夕","2027-09-15":"中秋","2027-10-08":"重阳"};
+const SOLAR_FESTIVALS={"01-01":"元旦","03-08":"妇女节","05-01":"劳动节","05-04":"青年节","06-01":"儿童节","09-10":"教师节","10-01":"国庆"};
+const calendarHoliday=key=>[SOLAR_FESTIVALS[key.slice(5)],LUNAR_FESTIVALS[key]].filter(Boolean).join("·");
+function calendarTypeFilter(){
+  const filter=element("details",null,"calendar-filter");filter.id="calendar-type-filter";filter.open=!!$(filter.id)?.open;
+  const summary=element("summary",calendarTypes.size===6?"筛选 · 全部":`筛选 · ${calendarTypes.size}/6`),menu=element("div",null,"calendar-filter-menu");summary.setAttribute("aria-label","筛选日历类型");const arrow=element("span",null,"select-arrow");arrow.setAttribute("aria-hidden","true");summary.append(arrow);
+  for(const [index,type] of ["全部类型",...CALENDAR_TYPES].entries()){
+    const row=element("label",null,index?"calendar-filter-option":"calendar-filter-all"),check=element("input");check.type="checkbox";check.id=`calendar-type-${index}`;check.checked=index?calendarTypes.has(type):calendarTypes.size===6;check.indeterminate=!index && calendarTypes.size>0 && calendarTypes.size<6;
+    check.onchange=()=>{
+      if(index){if(check.checked)calendarTypes.add(type);else calendarTypes.delete(type);}else calendarTypes=new Set(check.checked?CALENDAR_TYPES:[]);
+      renderCalendar();$(check.id).focus({preventScroll:true});
+    };
+    row.append(check,element("span",type,index?`cat-${CATEGORIES.indexOf(type)}`:null));menu.append(row);
+  }
+  filter.append(summary,menu);filter.onkeydown=event=>{if(event.key==="Escape"){event.preventDefault();event.stopPropagation();filter.open=false;summary.focus();}};return filter;
+}
+document.addEventListener("click",event=>{const filter=$("calendar-type-filter");if(filter && !filter.contains(event.target))filter.open=false;});
 function renderCalendar() {
   const root=$("board"), calendar=element("section",null,"calendar"),toolbar=element("div",null,"calendar-toolbar");
+  const visible=tasks.filter(task=>calendarTypes.has(task.category));
   const [year,month]=calendarMonth.split("-").map(Number);
   const previous=element("button","‹","secondary"),next=element("button","›","secondary"),today=element("button","今天","secondary");
   previous.setAttribute("aria-label","上个月");next.setAttribute("aria-label","下个月");
@@ -592,7 +666,7 @@ function renderCalendar() {
   }
   previous.onclick=()=>moveMonth(-1);next.onclick=()=>moveMonth(1);today.onclick=()=>calendarSelect(localInput(new Date()).slice(0,10));
   const controls=element("div",null,"calendar-controls");controls.append(previous,today,next);
-  toolbar.append(element("h2",`${year} 年 ${month} 月`),controls);calendar.append(toolbar);
+  const heading=element("div",null,"calendar-heading");heading.append(element("h2",`${year} 年 ${month} 月`),calendarTypeFilter());toolbar.append(heading,controls);calendar.append(toolbar);
   const grid=element("div",null,"calendar-grid");grid.setAttribute("aria-label",`${year}年${month}月`);
   for(const name of ["一","二","三","四","五","六","日"]) grid.append(element("span",name,"calendar-weekday"));
   const first=new Date(Date.UTC(year,month-1,1)),offset=(first.getUTCDay()+6)%7;
@@ -600,12 +674,13 @@ function renderCalendar() {
   const todayKey=localInput(new Date()).slice(0,10);
   for(let i=0;i<cells;i++) {
     const date=new Date(Date.UTC(year,month-1,1-offset+i)),key=date.toISOString().slice(0,10);
-    const matching=tasks.filter(task=>onCalendarDay(task,key)).sort((a,b)=>(deadline(a)||"9999").localeCompare(deadline(b)||"9999") || a.id.localeCompare(b.id));
+    const matching=visible.filter(task=>onCalendarDay(task,key)).sort((a,b)=>calendarTypeOrder(a,b) || (calendarEventTime(a)||"9999").localeCompare(calendarEventTime(b)||"9999") || a.id.localeCompare(b.id));
     const day=element("button",null,"calendar-day"+(key.slice(0,7)!==calendarMonth?" outside":"")+(key===selectedDay?" selected":""));
     day.dataset.date=key;day.setAttribute("aria-label",`${key}，${matching.length} 项安排`);
     day.setAttribute("aria-pressed",String(key===selectedDay));day.setAttribute("aria-controls","day-list");
     if(key===todayKey) day.setAttribute("aria-current","date");
-    day.append(element("span",String(date.getUTCDate()),"day-number"));
+    const dateLine=element("span",null,"calendar-date-line"),holiday=calendarHoliday(key);dateLine.append(element("span",String(date.getUTCDate()),"day-number"));
+    if(holiday){dateLine.append(element("span",holiday,"calendar-holiday"));day.setAttribute("aria-label",`${key}，${holiday}，${matching.length} 项安排`);}day.append(dateLine);
     for(const task of matching.slice(0,2)) {
       const title=element("span",task.title,`day-task cat-${CATEGORIES.indexOf(task.category)}`+(task.status==="done"?" is-done":""));title.title=task.title;day.append(title);
     }
@@ -620,14 +695,24 @@ function renderCalendar() {
     grid.append(day);
   }
   calendar.append(grid);
-  const undated=tasks.filter(task=>onCalendarDay(task,""));
+  const calendarCredit=externalLink("节日日期", "https://www.hko.gov.hk/sc/gts/time/conversion.htm");calendarCredit.className="calendar-credit";calendarCredit.title="公历节日及 2025–2027 年传统节日，仅标注当天，不含调休；农历日期来源：香港天文台";calendar.append(calendarCredit);
+  const undated=visible.filter(task=>onCalendarDay(task,""));
   if(undated.length) {const button=element("button",`未定日期 · ${undated.length} 项`,"undated-button secondary");button.setAttribute("aria-pressed",String(selectedDay===""));button.onclick=()=>calendarSelect("");calendar.append(button);}
   const agenda=element("section",null,"day-agenda"),list=element("div",null,"day-list");list.id="day-list";
-  const matching=tasks.filter(task=>onCalendarDay(task,selectedDay)).sort((a,b)=>a.status==="done" && b.status==="done"
-    ? (b.completed_at||b.updated_at).localeCompare(a.completed_at||a.updated_at)
-    : (a.status==="done")-(b.status==="done") || (deadline(a)||"9999").localeCompare(deadline(b)||"9999"));
+  // Events continuing from an earlier day start at the beginning of the selected day's timeline.
+  const timelineTime=task=>{const time=localInput(calendarEventTime(task));return !time?"待补充":selectedDay && time.slice(0,10)<selectedDay?"00:00":time.slice(11);};
+  const matching=visible.filter(task=>onCalendarDay(task,selectedDay)).sort((a,b)=>timelineTime(a).localeCompare(timelineTime(b)) || calendarTypeOrder(a,b) || a.id.localeCompare(b.id));
   agenda.append(element("h2",`${selectedDay ? `${Number(selectedDay.slice(5,7))} 月 ${Number(selectedDay.slice(8))} 日` : "未定日期"} · ${matching.length} 项安排`));
-  if(matching.length)list.append(...matching.map(card));else list.append(element("p","这一天没有安排。","day-empty"));
+  for(let index=0;index<matching.length;index+=3){
+    const row=element("div",null,"agenda-row");
+    for(const task of matching.slice(index,index+3)){
+      const entry=element("div",null,"agenda-entry"),time=element("div",null,"agenda-time"),event=card(task);time.append(element("span",timelineTime(task)));
+      event.classList.add("calendar-event");event.onclick=e=>{if(!e.target.closest("button,input,select,textarea,a,label") && !window.getSelection()?.toString())openTask(tasks.find(item=>item.id===task.id) || task);};
+      entry.append(time,event);row.append(entry);
+    }
+    list.append(row);
+  }
+  if(!matching.length)list.append(element("p",calendarTypes.size?"这一天没有所选类型的安排。":"请选择要显示的类型。","day-empty"));
   agenda.append(list);root.replaceChildren(calendar,agenda);
 }
 function renderArchive() {
@@ -643,7 +728,7 @@ function renderArchive() {
     const actions=element("div",null,"task-actions"),view=element("button","查看","edit-task"),remove=element("button","删除","delete-task");
     view.setAttribute("aria-label",`查看归档：${task.title}`);
     view.onclick=async()=>{view.disabled=true;try{showArchiveDetail(await api(`/api/tasks/${task.id}`));}catch(error){$("archive-error").textContent=error.message;}finally{view.disabled=false;}};
-    remove.setAttribute("aria-label",`删除归档：${task.title}`);remove.onclick=()=>{deleting=task;$("delete-dialog").showModal();};
+    remove.setAttribute("aria-label",`删除归档：${task.title}`);remove.onclick=()=>confirmCardDeletion(task);
     const restore=element("button","恢复","text-button");restore.setAttribute("aria-label",`恢复归档：${task.title}`);restore.onclick=()=>archiveTask(task,false);actions.append(view,restore,remove);row.append(info,actions);return row;
   }));
   if(!archiveItems.length) $("archive-list").append(element("p","此板块暂无归档任务。","archive-empty"));
@@ -661,7 +746,7 @@ async function loadArchive(more=false) {
 function showArchiveDetail(task) {
   const root=$("archive-detail");root.replaceChildren(element("span",task.category,`badge cat-${CATEGORIES.indexOf(task.category)}`),element("h3",task.title,"archive-title"));
   root.append(element("p",task.category==="作业"?`原截止时间 · ${formatTime(task.due_at,true)}`:`起止时间 · ${timeRange(task)}`,"task-time"));
-  if(task.location)root.append(element("p",`地点 · ${task.location}`,"task-location"));
+  if(task.location && task.category!=="记录")root.append(element("p",`地点 · ${task.location}`,"task-location"));
   if(taskContent(task))root.append(element("p",taskContent(task),"task-content"));
   if(task.course)root.append(element("p",task.course,"course"));
   for(const [key,label] of [["teacher","教师"],["week","教学周"],["period","节次"],["seat","座位"]])if(task.details?.[key])root.append(element("p",`${label} · ${task.details[key]}`,"event-detail"));
@@ -699,7 +784,7 @@ function loadSyncProgress(){
   }catch{}
 }
 function syncStepStates(){
-  return [!!collectorState && (collectorState.version || "0").localeCompare("1.9.3",undefined,{numeric:true})>=0,!!collectorState?.connected,!!sourceLinksState?.length,!!cloudState?.enabled,syncExecuted];
+  return [!!collectorState && (collectorState.version || "0").localeCompare("1.9.5",undefined,{numeric:true})>=0,!!collectorState?.connected,!!sourceLinksState?.length,!!cloudState?.enabled,syncExecuted];
 }
 function updateSyncSteps(){
   const states=syncStepStates();
@@ -742,14 +827,14 @@ window.addEventListener("message",async event=>{
 function updateSyncControls() {
   const connected=!!collectorState?.connected;
   $("collector-controls").hidden=!collectorState || connected;
-  $("install-state").textContent=collectorState?`已安装 v${collectorState.version} · ${syncStepStates()[0]?"已是最新版本":"请更新至 v1.9.3"}`:"仅需在电脑上安装一次";
+  $("install-state").textContent=collectorState?`已安装 v${collectorState.version} · ${syncStepStates()[0]?"已是最新版本":"请更新至 v1.9.5"}`:"仅需在电脑上安装一次";
   $("collector-options").disabled=!collectorState;
   $("sync-existing").hidden=!!collectorState || !cloudState?.enabled;
   $("browser-settings").hidden=!connected;
   $("collector-scan").disabled=syncing || !(cloudState?.enabled || (connected && collectorState.enabled));
   $("collector-scan").textContent=syncing?"正在同步…":"一键同步";
   $("cloud-authorize").disabled=!connected || !cloudState?.available;
-  $("cloud-authorize").textContent=syncStepStates()[0]?"载入云端同步":"先更新扩展至 v1.9.3";
+  $("cloud-authorize").textContent=syncStepStates()[0]?"载入云端同步":"先更新扩展至 v1.9.5";
   if(!connected){$("cloud-panel").replaceChildren();$("cloud-authorize").hidden=false;}
   $("cloud-revoke").hidden=!cloudState?.enabled;
   $("cloud-revoke").disabled=syncing || !cloudState?.enabled;
@@ -771,7 +856,10 @@ async function checkCollector() {
   }
   updateSyncControls();renderSources();
 }
-function websiteName(link) {return link.source==="ruc_courses"?"微人大 · 课表与考试":link.name;}
+function websiteName(link) {
+  const id=link.source || link.id;
+  return id==="ruc_courses"?"课表与考试网页":id==="ruc_exams"?"考试安排网页":link.generic?"网站页面":"作业网站";
+}
 async function setupGeneric(link) {
   if(!collectorState?.connected)throw new Error("请先完成第 2 步连接扩展，再点击此网站的识别设置。");
   requireSelectiveSync(link.source);
@@ -874,23 +962,23 @@ $("collector-options").onclick=()=>collectorCommand("options").catch(error=>{$("
 $("cloud-authorize").onclick=()=>{
   if(!syncStepStates()[0]){setSyncStep(1);return;}ensureCloudPanel();
 };
-async function checkCloud() {
+async function checkCloud(snapshot) {
   const session=syncSession,sequence=++cloudCheckSequence;lastCloudCheck=Date.now();
   try {
-    const data=await api("/api/cloud");
+    const data=snapshot || await api("/api/cloud");
     if(session!==syncSession || sequence!==cloudCheckSequence)return;
     if(sourceLinksState===null)await loadSourceLinks();
     if(session!==syncSession || sequence!==cloudCheckSequence)return;
     cloudState=data;
-    $("cloud-status").textContent=cloudState.enabled?`云端自动同步已开启 · 每 ${cloudState.interval_minutes || (trialMode?30:15)} 分钟`:"浏览器自动同步 · 每 15 分钟";
-    $("cloud-grant-state").textContent=!cloudState.available?"暂不可用，可跳过此步":cloudState.enabled?`已开启 · 每 ${cloudState.interval_minutes || (trialMode?30:15)} 分钟更新`:"尚未开启";
+    $("cloud-status").textContent=cloudState.enabled?`云端自动同步已开启 · 每 ${cloudState.interval_minutes || 60} 分钟`:"浏览器自动同步 · 每 15 分钟";
+    $("cloud-grant-state").textContent=!cloudState.available?"暂不可用，可跳过此步":cloudState.enabled?`已开启 · 每 ${cloudState.interval_minutes || 60} 分钟更新`:"尚未开启";
     $("sync-mode-note").textContent="登录过期的网站，可点击下方“重新登录”。";
     updateSyncControls();renderSources();maybeLoginReminder();
   }catch(error){if(session!==syncSession || sequence!==cloudCheckSequence)return;$("cloud-status").textContent=error.message;$("cloud-grant-state").textContent="暂时无法读取授权状态，请重新打开此清单重试。";}
 }
 function needsLogin(source) {
   const state=cloudState?.sources?.[source.id];
-  return /(?:登录|登陆)(?:已)?(?:失效|过期)/.test(source.error || "") || !!(cloudState?.enabled && (state?.error_code==="auth_expired" || state?.auth_expired_at));
+  return /(?:登录|登陆)(?:已)?(?:失效|过期)/.test([source.error,collectorState?.sourceResults?.[source.id]?.error].filter(Boolean).join(" ")) || !!(cloudState?.enabled && (state?.error_code==="auth_expired" || state?.auth_expired_at));
 }
 function sourceURL(source) {return sourceLinksState?.find(link=>link.source===source.id)?.url || source.url;}
 function loginLink(source) {
@@ -914,19 +1002,20 @@ function renderSources() {
     const academic=source.kind==="academic",browserOnly=academic || source.browser_only;
     const cloud=!browserOnly && cloudState?.enabled?cloudState.sources?.[source.id]:null;
     const local=collectorState?.sourceResults?.[source.id];
-    const seen=cloud?.last_success || source.last_seen;
-    const fresh=seen && Date.now()-Date.parse(seen)<30*60000;
+    const seen=cloud?.last_success || (source.error?null:source.last_seen);
+    const fresh=seen && Date.now()-Date.parse(seen)<75*60000;
     const error=cloud?.authorized ? cloud.error : (local?.error && (!seen || Date.parse(local.time)>Date.parse(seen)) ? local.error:source.error);
-    const incomplete=!academic && (cloud?.last_success ? cloud.status_count<cloud.count : source.imported_count>source.status_count);
+    const total=cloud?.last_success?cloud.count:source.task_count;
+    const incomplete=!academic && total>0 && (cloud?.last_success ? cloud.status_count<cloud.count : source.imported_count>source.status_count);
     const expired=needsLogin(source);
-    const label=expired?"登录过期":error?"需处理":incomplete?"状态不完整":fresh?"已同步":seen?"等待更新":"待连接";
-    header.append(expired?element("strong",source.name):externalLink(`${source.name} ↗`,sourceURL(source)),element("span",label,"state"+(fresh && !error && !incomplete?" connected":"")));
-    const sync=element("button","同步","secondary source-sync");sync.type="button";sync.setAttribute("aria-label",`同步：${source.name}`);
+    const label=expired?"登录过期":error?"需处理":incomplete?"状态不完整":seen && total===0?"已验证 · 暂无作业":fresh?"已同步":seen?"等待更新":"待验证";
+    const displayName=`${websiteName(source)} · ${new URL(sourceURL(source)).hostname}`;
+    header.append(expired?element("strong",displayName):externalLink(`${displayName} ↗`,sourceURL(source)),element("span",label,"state"+(fresh && !error && !incomplete?" connected":"")));
+    const sync=element("button","同步","secondary source-sync");sync.type="button";sync.setAttribute("aria-label",`同步：${displayName}`);
     sync.disabled=syncing || !(collectorState?.connected && collectorState.enabled || !browserOnly && cloudState?.enabled && cloud?.authorized);
     sync.onclick=()=>syncSources(source.id);
     if(expired){const actions=element("div",null,"source-actions");actions.append(loginLink(source),sync);header.append(actions);}else header.append(sync);
     row.append(header);
-    const total=cloud?.last_success?cloud.count:source.task_count;
     row.append(element("p",expired?"重新登录后，点击此网站的“同步”。仍未恢复时，回第 4 步更新。":error || (seen?`${formatTime(seen)} · ${total} 项${academic?"日程":"作业"}${incomplete?" · 部分完成状态未识别":""}`:cloud?.authorized?"已连接云端，等待同步":"等待首次同步")));
     if(source.generic)row.append(element("p","通过浏览器同步；识别结果可在第 3 步调整。","hint"));
     else if(source.browser_only)row.append(element("p","此网站通过电脑浏览器同步。","hint"));
@@ -934,39 +1023,53 @@ function renderSources() {
     return row;
   }));
 }
-async function refresh() {
+async function refresh({poll=false}={}) {
+  if(poll && (syncBusy || !navigator.onLine))return;
   if (hasDraft() || $("action-confirm-dialog").open || document.querySelector(".checklist[data-busy]")) return;
-  const sequence = ++refreshSequence;
+  const sequence = ++refreshSequence,session=syncSession;syncBusy=true;
   try {
-    const data = await api("/api/board");
+    const incremental=poll && syncRevision!==null && Date.now()-lastFullSync<600000;
+    const data = await api(`/api/sync${incremental?`?revision=${encodeURIComponent(syncRevision)}`:""}`);
+    if(session!==syncSession)return;
     if (sequence !== refreshSequence || hasDraft() || $("action-confirm-dialog").open || document.querySelector(".checklist[data-busy]")) return;
     $("login").hidden = true; $("workspace").hidden = false;
+    if(data.cloud)checkCloud(data.cloud);
+    if(data.unread!==undefined && typeof applyCommunityUnread==="function")applyCommunityUnread(data.unread);
+    if(!effectsSaving && typeof data.effects==="boolean")applyEffects(data.effects);
+    $("load-error").textContent="";
+    if(typeof applyDailySummaryStatus==="function")applyDailySummaryStatus(data);
+    if(data.unchanged){focusClockOffset=Date.parse(data.server_time)-Date.now();tickFocus();maybeLoginReminder();return;}
+    syncRevision=data.sync_revision;lastFullSync=Date.now();
     tasks = data.tasks;if(axisLayoutRevision!==(data.axis_layout?.revision || 0) && !axisScene?.dirty)resetAxisScene();savedAxisLayout=data.axis_layout?.layout || null;axisLayoutRevision=data.axis_layout?.revision || 0; axes=data.axes || [];axisItems=data.axis_items || [];sources = data.sources; timetables=data.timetables || [];
+    quadrantPositions=data.quadrants || {};if(data.focus)applyFocus(data.focus);else loadFocus();
     if($("sources-dialog").open && collectorState)checkCollector();
-    if(Date.now()-lastCloudCheck>=60000)checkCloud();
-    const signature = JSON.stringify([tasks, axes, axisItems, sources, timetables, data.axis_layout, categoryFilter, Math.floor(Date.now()/60000)]);
+
+    const signature = JSON.stringify([tasks, axes, axisItems, sources, timetables, data.axis_layout, data.quadrants, categoryFilter, Math.floor(Date.now()/60000)]);
     if (signature !== lastPayload) { render(); lastPayload = signature; }
     $("load-error").textContent = "";
     maybeLoginReminder();
   } catch (error) {
-    $("load-error").textContent = `无法同步：${error.message}。页面上的内容可能不是最新的。`;
-  }
+    if(session===syncSession)$("load-error").textContent = `无法同步：${error.message}。页面上的内容可能不是最新的。`;
+  }finally{if(sequence===refreshSequence)syncBusy=false;}
 }
 function toggleDates() {
   const homework = taskCategory === "作业",record=taskCategory==="记录";
   $("record-time-field").hidden=!record;$("record-time").required=record;
+  $("task-location-field").hidden=record;
   $("deadline-field").hidden = !homework; $("range-fields").hidden = homework || record;
   $("due-at").required = homework && !editing?.source;
   $("starts-at").required = !homework && !record; $("ends-at").required = !homework && !record;
 }
 function openTask(task = null) {
   if (hasDraft()) { notice("请先保存或取消正在编辑的待办事项"); return; }
-  editing = task; $("task-form").reset(); $("task-error").textContent = "";
+  if(typeof clearFocusEditor==="function")clearFocusEditor();
+  editing = task;draftTaskId=task?null:crypto.randomUUID(); $("task-form").reset(); $("task-error").textContent = "";
   taskCategory = task?.category || newTaskCategory || (categoryFilter==="全部"?"作业":categoryFilter);
   $("record-time").value=localInput(task?.starts_at || new Date());
   fillAxisSelect(task ? task.axis_id : newTaskAxis);
   newTaskAxis=null;newTaskCategory=null;
   $("dialog-title").textContent = task ? `编辑${taskCategory}` : `添加${taskCategory}`;
+  $("editor-delete").hidden=!task;$("editor-delete").textContent=`删除${taskCategory}`;
   $("task-title").value = task?.title || "";
   $("task-location").value = task?.location || "";
   $("task-content").value=taskContent(task);
@@ -1012,13 +1115,13 @@ $("sources-button").onclick = async () => {
 };
 document.querySelectorAll(".close-dialog").forEach(button => button.onclick = () => button.closest("dialog").close());
 $("task-form").onsubmit = async event => {
-  event.preventDefault(); $("save-task").disabled = true; $("task-error").textContent = "";
+  event.preventDefault();if(focusEditor){if(focusEditor.infoEditing)await saveFocusInformation();return;}$("save-task").disabled = true; $("task-error").textContent = "";
   try {
     if (uploading) throw new Error("请等待附件上传完成");
     const homework = taskCategory === "作业";
     if ($("task-todos").querySelector("[data-dirty], [data-busy]")) throw new Error("请先确认或取消正在输入的待办事项");
     const links=[...$("task-links").querySelectorAll(".link-edit-row")].map(row=>({label:row.querySelector(".link-label").value.trim(),url:row.querySelector(".link-url").value.trim()})).filter(link=>link.label || link.url);
-    const payload = {category: taskCategory, title: $("task-title").value.trim(), content:$("task-content").value.trim(), location: $("task-location").value.trim(), todos: draftTodos, links, attachments:draftAttachments.map(file=>file.id), axis_id:$("task-axis").value || null,status:homework?$("status").value:taskCategory==="课程"?"todo":$("task-done").checked?"done":"todo",
+    const payload = {category: taskCategory, title: $("task-title").value.trim(), content:$("task-content").value.trim(), location: taskCategory==="记录"?"":$("task-location").value.trim(), todos: draftTodos, links, attachments:draftAttachments.map(file=>file.id), axis_id:$("task-axis").value || null,status:homework?$("status").value:taskCategory==="课程"?"todo":$("task-done").checked?"done":"todo",
       due_at: homework ? inputTime($("due-at").value) : null, starts_at: homework ? null : inputTime($(taskCategory==="记录"?"record-time":"starts-at").value),
       ends_at: homework ? null : inputTime($(taskCategory==="记录"?"record-time":"ends-at").value)};
     payload.details={...(editing?.details || {})};delete payload.details.organizer;
@@ -1032,28 +1135,44 @@ $("task-form").onsubmit = async event => {
     }
     if(taskCategory==="课程")payload.details.teacher=$("schedule-person").value.trim();
     if(taskCategory==="考试")payload.details.seat=$("schedule-seat").value.trim();
-    if (editing) payload.revision = editing.revision;
+    if(editing)payload.revision=editing.revision;else payload.id=draftTaskId;
     await api(editing ? `/api/tasks/${editing.id}` : "/api/tasks", editing ? "PATCH" : "POST", payload);
     $("task-dialog").close(); notice("卡片已保存"); await refresh();if($("axis-dialog").open)renderAxisMembers();
   } catch (error) { $("task-error").textContent = error.message; }
   finally { $("save-task").disabled = false; }
 };
+$("editor-delete").onclick=()=>{
+  if(uploading || $("save-task").disabled){notice("请等待当前保存或上传完成。");return;}
+  if(editing)confirmCardDeletion(editing);
+};
+function confirmCardDeletion(task){
+  deleting=task;$("delete-title").textContent=`删除这张${task.category}卡片？`;
+  $("delete-message").textContent=`“${task.title}”将被删除。`+(task.source?"\n这是从教学网站导入的卡片，删除后不会再次自动加入。":"\n删除后无法在看板中恢复。");
+  $("confirm-delete").textContent="删除卡片";$("delete-dialog").showModal();
+}
 $("confirm-delete").onclick = async () => {
   $("confirm-delete").disabled = true;
-  try { await api(`/api/tasks/${deleting.id}`, "DELETE", {revision: deleting.revision}); $("delete-dialog").close(); notice("任务已删除"); await refresh(); if($("archive-dialog").open) await loadArchive(); }
+  const target=deleting;
+  try {
+    await api(`/api/tasks/${target.id}`, "DELETE", {revision: target.revision});$("delete-dialog").close();
+    if(editing?.id===target.id){$("task-dialog").close();editing=null;}
+    notice("任务已删除");await refresh();if($("archive-dialog").open)await loadArchive();if($("axis-dialog").open)renderAxisMembers();
+  }
   catch (error) { notice(error.message); }
   finally { $("confirm-delete").disabled = false; }
 };
 const demoSteps=[
-  {category:"全部",view:"calendar",target:"#board",title:"日历视图：按日期查看安排",text:"选择日期，查看当天的任务、课程和记录。点击卡片可以编辑详情。"},
+  {category:"全部",view:"calendar",target:"#board",title:"日历视图：按日期查看安排",text:"选择日期，沿时间轴查看当天的卡片；月份旁边可以筛选类型。节日会标在日期旁，点击卡片即可编辑。"},
   {category:"全部",view:"axes",target:"#board",title:"轴线视图：串起目标与记录",text:"添加轴线，把卡片按时间串在一起。点击节点编辑，拖动调整位置，完成后保存布局；末尾的加号可以添加卡片。"},
+  {category:"全部",view:"quadrants",target:"#board",title:"象限：想清楚先做哪件事",text:"把待安排卡片拖进象限，按紧急性与重要性分清先后。空白处可拖动画布，滚轮或双指缩放；边缘箭头会带你找到画面外的卡片。"},
+  {target:"#focus-button",title:"专注：给眼前这件事一段时间",text:"在左下角设置时长，选好目标卡片，再开始专注。信息随时可编辑，计时可暂停和继续；结束后由你决定是否留下记录，也可导出到记录板块。"},
   {category:"作业",target:"#board",title:"作业：进度一目了然",text:"待开始、进行中、已完成分栏展示。卡片上的待办事项可以增删、修改和拖动排序；其他详情通过“编辑”修改。"},
   {category:"记录",target:"#board",title:"记录",text:"记下做过的事和当时的感受。记录也会出现在总览。"},
   {target:"#add-task",title:"随时补充自己的安排",text:"填写标题和时间，再按需要补充地点、内容、待办、附件和链接。"},
   {target:"#sources-button",title:"网站配置在这里",text:"点击侧栏的“来源与同步”，安装并连接同步扩展，就可以接入自己的校园网站。下一步带你查看配置位置。"},
   {target:"#add-source-link",sources:true,title:"一个网站，一条配置",text:"点击“添加网站”，粘贴列表页面的网址并确认。上方五个点显示进度，完成每一步后点击“下一步”继续。"},
-  {target:"#cloud-settings > h3",sources:true,title:"云端同步：电脑关机也能更新",text:"在第 4 步直接开启云端同步，电脑关机后也能更新。微人大、YOJ 和通用识别网站仍需浏览器运行。点击“下一步”后执行同步。"},
-  {target:"#user-menu-toggle",title:"账户菜单：消息与归档",text:"点击头像和用户名，打开消息看板、归档处、反馈与账号设置。可以随时手动归档；已完成任务满 7 天也会自动归档，课程除外。归档后可查看、恢复或删除。"}
+  {target:"#cloud-settings > h3",sources:true,title:"云端同步：电脑关机也能更新",text:"在第 4 步为支持的作业网站开启云端同步，电脑关机后也能更新。课表、考试与仅支持浏览器识别的网页仍需浏览器运行。点击“下一步”后执行同步。"},
+  {target:"#user-menu-toggle",title:"账户菜单：总结与消息",text:"点击头像查看今日总结，回顾从今天零点起完成的事。每天首次打开会展示昨日总结。这里也有消息、归档与账号设置；课程和记录不会自动归档。"}
 ];
 let demoIndex=0,demoOriginal=null,demoFrame=0,demoReveal=false;
 const demoKey=()=>`ruchecklist-demo:${boardAccount}`;
@@ -1130,6 +1249,7 @@ function setAuthMode(mode) {
 }
 function configureAccount(data) {
   publicRegistration=!!data.public_registration;$("public-user-count").textContent=Number.isInteger(data.registered)?String(data.registered):"—";
+  $("public-user-count").closest(".landing-stats").hidden=!Number.isInteger(data.registered);
   trialMode=!!data.trial;isAdmin=!!data.admin;boardAccount=data.account || (trialMode?"":"personal");accountName=data.username || accountName;registrationOpen=!!data.registration_open;
   loadSyncProgress();
   updateAccountCard();
@@ -1164,7 +1284,8 @@ $("logout").onclick=()=>{$("logout-error").textContent="";$("logout-dialog").sho
 $("confirm-logout").onclick=async()=>{try{await api("/api/logout","POST",{});showLogin();}catch(error){$("logout-error").textContent=error.message;}};
 document.addEventListener("visibilitychange", () => { if (!document.hidden && !$("workspace").hidden) refresh(); });
 let lastPoll=0;
-setInterval(() => { if (!document.hidden && !$("workspace").hidden && !document.activeElement.matches("#board input, #board select") && Date.now()-lastPoll>=(trialMode?60000:6000)) {lastPoll=Date.now();refresh();} }, 6000);
+setInterval(() => { if (!document.hidden && !$("workspace").hidden && !document.activeElement.matches("#board input, #board select") && Date.now()-lastPoll>=60000) {lastPoll=Date.now();refresh({poll:true});} }, 6000);
+window.addEventListener("online",()=>{if(!$("workspace").hidden)refresh();});
 document.addEventListener("DOMContentLoaded",()=>{
 api("/api/session").then(async data => {
   configureAccount(data);
@@ -1173,3 +1294,108 @@ api("/api/session").then(async data => {
   if(sessionStorage.getItem("resume-setup")){sessionStorage.removeItem("resume-setup");$("sources-button").click();}else maybeDemo();
 }).catch(() => { showLogin(); $("login-error").textContent = "服务器暂时无法连接，请刷新重试"; });
 });
+
+// The public tour uses synthetic examples only; it never calls the task APIs.
+(() => {
+  const root=$("login"),pages=[...root.querySelectorAll("[data-launch-page]")],track=root.querySelector(".launch-track"),nav=[...root.querySelectorAll("[data-launch-to]")];
+  const reduced=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let current=0,lockedUntil=0,lastWheel=0,wheelTotal=0,wheelDirection=0,wheelConsumed=false,wheelInner=false,touch=null;
+  function go(index,{login=false}={}){
+    index=Math.max(0,Math.min(pages.length-1,index));
+    const changed=index!==current,from=pages[current];current=index;
+    // One compositor-driven translation, even when a navigation click interrupts a transition.
+    track.style.transform=`translate3d(0,${-100*index}%,0)`;root.dataset.page=String(index);
+    if(changed){lockedUntil=performance.now()+(reduced()?0:950);pages[index].scrollTop=0;}
+    if(from.contains(document.activeElement) && changed)root.querySelector(`.launch-nav [data-launch-to="${index}"]`).focus({preventScroll:true});
+    pages.forEach((page,i)=>{page.classList.toggle("is-current",i===index);page.inert=i!==index;page.setAttribute("aria-hidden",String(i!==index));});
+    nav.forEach(button=>{if(Number(button.dataset.launchTo)===index)button.setAttribute("aria-current","step");else button.removeAttribute("aria-current");});
+    $("launch-page-number").textContent=`0${index+1} / 04`;
+    if(changed && index===2)drawJourney();
+    if(login){
+      const page=pages[0],form=$("login-form");
+      page.scrollTo({top:Math.max(0,form.getBoundingClientRect().top-page.getBoundingClientRect().top+page.scrollTop-(page.clientHeight-form.offsetHeight)/2),behavior:"instant"});
+      $(trialMode?"username":"password").focus({preventScroll:true});
+    }
+  }
+  nav.forEach(button=>button.onclick=()=>go(Number(button.dataset.launchTo)));
+  root.querySelectorAll("[data-launch-login]").forEach(button=>button.onclick=()=>go(0,{login:true}));
+  const editable=target=>target instanceof Element && !!target.closest("input,textarea,select,[contenteditable=true]");
+  function canScroll(target,direction){
+    for(let node=target instanceof Element?target:null;node && node!==root;node=node.parentElement){
+      if(node.scrollHeight>node.clientHeight+2 && /auto|scroll/.test(getComputedStyle(node).overflowY) && (direction>0?node.scrollTop+node.clientHeight<node.scrollHeight-2:node.scrollTop>2))return true;
+    }
+    return false;
+  }
+  root.addEventListener("wheel",event=>{
+    if(root.hidden || event.ctrlKey || event.metaKey || Math.abs(event.deltaY)<=Math.abs(event.deltaX) || editable(event.target))return;
+    const now=performance.now(),direction=Math.sign(event.deltaY),fresh=now-lastWheel>220 || direction!==wheelDirection;
+    if(fresh){wheelTotal=0;wheelConsumed=false;wheelInner=false;}lastWheel=now;wheelDirection=direction;
+    if(now<lockedUntil || wheelConsumed){event.preventDefault();wheelConsumed=true;return;}
+    // A tall page scrolls normally first; its final inertia cannot skip the next page.
+    if(canScroll(event.target,direction)){wheelTotal=0;wheelInner=true;return;}
+    if(wheelInner){event.preventDefault();return;}
+    event.preventDefault();wheelTotal+=Math.abs(event.deltaY)*(event.deltaMode===1?16:event.deltaMode===2?pages[current].clientHeight:1);
+    if(wheelTotal>=36){wheelConsumed=true;go(current+direction);}
+  },{passive:false});
+  root.addEventListener("keydown",event=>{
+    if(editable(event.target) || event.ctrlKey || event.metaKey || event.altKey)return;
+    const direction=["ArrowDown","PageDown"].includes(event.key)?1:["ArrowUp","PageUp"].includes(event.key)?-1:0;
+    if(direction){if(canScroll(event.target,direction))return;event.preventDefault();if(!event.repeat)go(current+direction);}
+    else if(event.key==="Home" || event.key==="End"){event.preventDefault();go(event.key==="Home"?0:pages.length-1);}
+  });
+  root.addEventListener("touchstart",event=>{
+    if(event.touches.length!==1 || editable(event.target)){touch=null;return;}
+    const point=event.touches[0];touch={x:point.clientX,y:point.clientY,index:current,up:!canScroll(event.target,-1),down:!canScroll(event.target,1)};
+  },{passive:true});
+  root.addEventListener("touchend",event=>{
+    const start=touch;touch=null;if(!start || !event.changedTouches.length || start.index!==current || performance.now()<lockedUntil)return;
+    const point=event.changedTouches[0],dy=start.y-point.clientY,dx=start.x-point.clientX;
+    if(Math.abs(dy)>65 && Math.abs(dy)>Math.abs(dx)*1.3 && (dy>0?start.down:start.up))go(current+Math.sign(dy));
+  },{passive:true});
+  root.addEventListener("touchcancel",()=>{touch=null;},{passive:true});
+  go(0);
+  // Small, local pointer response. No motion work runs for touch or reduced-motion users.
+  root.querySelectorAll(".launch-demo").forEach(scene=>{
+    let frame=0;
+    scene.addEventListener("pointermove",event=>{
+      if(event.pointerType!=="mouse" || reduced())return;cancelAnimationFrame(frame);
+      const x=event.clientX,y=event.clientY;
+      frame=requestAnimationFrame(()=>{const box=scene.getBoundingClientRect(),px=(x-box.left)/box.width,py=(y-box.top)/box.height;scene.style.setProperty("--tilt-x",`${(0.5-py)*3}deg`);scene.style.setProperty("--tilt-y",`${(px-0.5)*3}deg`);scene.style.setProperty("--glow-x",`${px*100}%`);scene.style.setProperty("--glow-y",`${py*100}%`);});
+    });
+    scene.addEventListener("pointerleave",()=>{cancelAnimationFrame(frame);scene.style.removeProperty("--tilt-x");scene.style.removeProperty("--tilt-y");});
+  });
+  $("collect-demo-replay").onclick=()=>{const scene=root.querySelector(".collect-demo");scene.classList.remove("replaying");requestAnimationFrame(()=>requestAnimationFrame(()=>scene.classList.add("replaying")));};
+  const days=[
+    [["08:00","课程","数学分析","#eef1fa"],["16:00","作业","完成线性表练习","#c0aaff"],["21:30","记录","今天终于弄懂的一个问题","#a9ceff"]],
+    [["10:00","考试","数据结构 · 第一次小测","#f0ce9c"],["14:00","会议","小组讨论：课程展示","#efb5d2"],["19:00","活动","去操场跑一跑","#a4dfcb"]],
+    [["08:00","课程","概率论与数理统计","#eef1fa"],["15:30","作业","读书报告：整理提纲","#c0aaff"],["22:00","记录","记下这周想继续做的事","#a9ceff"]]
+  ];
+  function showDay(index){
+    root.querySelectorAll("[data-demo-day]").forEach((button,i)=>button.setAttribute("aria-pressed",String(i===index)));
+    $("launch-day-events").replaceChildren(...days[index].map(([time,type,title,color])=>{const article=element("article"),text=element("div");article.style.setProperty("--demo-color",color);text.append(element("strong",title),element("small",type));article.append(element("time",time),text);return article;}));
+  }
+  root.querySelectorAll("[data-demo-day]").forEach(button=>button.onclick=()=>showDay(Number(button.dataset.demoDay)));showDay(0);
+  const journeys=[
+    {title:"这门课，争取 4.0",dates:["第 1 周","第 3 周","第 5 周"],titles:["课前预习","第一次小测","找到适合自己的方法"],types:["作业","考试","记录"],note:"从“还没弄懂”，到能独立讲清一道题。",path:"M55 160 C120 160 130 86 210 86 S320 165 380 118 S480 32 545 45",heights:[86,118,45],colors:["#bca4ff","#a8dfff"]},
+    {title:"让运动成为习惯",dates:["第一天","第二周","一个月后"],titles:["先跑两公里","和朋友一起打球","跑完第一个五公里"],types:["活动","活动","记录"],note:"不追求每次都更快，先让自己愿意再出发。",path:"M55 160 L210 70 L380 120 L545 40",heights:[70,120,40],colors:["#b4d9cb","#7cddc1"]},
+    {title:"沿海旅行随记",dates:["出发前","第一天","第三天"],titles:["留出几天空闲","海边的一场日落","想再去一次的小城"],types:["记录","活动","记录"],note:"行程会结束，看过的风景和当时的心情还在。",path:"M55 160 C125 160 130 55 210 55 S300 140 380 140 S485 80 545 80",heights:[55,140,80],colors:["#efc68f","#c5b0f5"]}
+  ];
+  function drawJourney(){
+    const path=root.querySelector(".journey-plot path"),nodes=[...root.querySelectorAll(".journey-node")];
+    for(const node of [path,...nodes])for(const animation of node.getAnimations())animation.cancel();
+    if(reduced())return;
+    path.animate([{strokeDashoffset:1},{strokeDashoffset:0}],{duration:2100,delay:100,easing:"cubic-bezier(.4,0,.2,1)",fill:"backwards"});
+    nodes.forEach((node,i)=>node.animate([{opacity:0,translate:"0 8px"},{opacity:1,translate:"0 0"}],{duration:550,delay:450+i*550,easing:"ease-out",fill:"backwards"}));
+  }
+  root.querySelectorAll("[data-demo-journey]").forEach(button=>button.onclick=()=>{
+    const index=Number(button.dataset.demoJourney),item=journeys[index];root.querySelectorAll("[data-demo-journey]").forEach((node,i)=>node.setAttribute("aria-pressed",String(i===index)));
+    $("launch-journey-title").textContent=item.title;root.querySelectorAll(".journey-node").forEach((node,i)=>{node.querySelector("small").textContent=item.dates[i];node.querySelector("strong").textContent=item.titles[i];node.querySelector("span").textContent=item.types[i];node.style.top=`${item.heights[i]/220*100}%`;});$("launch-journey-reflection").querySelector("p").textContent=item.note;
+    root.querySelector(".journey-plot path").setAttribute("d",item.path);root.querySelectorAll("#journey-gradient stop").forEach((stop,i)=>stop.setAttribute("stop-color",item.colors[i]));drawJourney();
+  });
+  let timer=null,seconds=1500,deadline=0;
+  function stop(){clearInterval(timer);timer=null;$("launch-clock-toggle").setAttribute("aria-pressed","false");$("launch-clock-toggle").textContent=seconds===1500?"试试专注 ▷":"继续体验 ▷";}
+  $("launch-clock-toggle").onclick=()=>{
+    if(timer){stop();return;}deadline=Date.now()+seconds*1000;$("launch-clock-toggle").textContent="暂停 Ⅱ";$("launch-clock-toggle").setAttribute("aria-pressed","true");
+    timer=setInterval(()=>{if(root.hidden || document.hidden || !pages[3].classList.contains("is-current")){stop();return;}seconds=Math.max(0,Math.ceil((deadline-Date.now())/1000));$("launch-clock-value").textContent=`00:${String(Math.floor(seconds/60)).padStart(2,"0")}:${String(seconds%60).padStart(2,"0")}`;if(!seconds){stop();seconds=1500;$("launch-clock-note").textContent="体验结束。真正的专注，由你决定是否留下记录。";}},250);
+  };
+})();

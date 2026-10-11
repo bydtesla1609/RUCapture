@@ -14,7 +14,7 @@ async function registerGeneric(links) {
   for(const origin of new Set(links.map(link=>`${new URL(link.url).origin}/*`)))if(await chrome.permissions.contains({origins:[origin]}))matches.push(origin);
   const existing=await chrome.scripting.getRegisteredContentScripts({ids:["ru-generic"]});
   if(existing.length)await chrome.scripting.unregisterContentScripts({ids:["ru-generic"]});
-  if(matches.length)await chrome.scripting.registerContentScripts([{id:"ru-generic",matches,js:["generic-parser.js","generic-content.js"],runAt:"document_idle",persistAcrossSessions:true}]);
+  if(matches.length)await chrome.scripting.registerContentScripts([{id:"ru-generic",matches,js:["parsers.js","generic-parser.js","generic-content.js"],runAt:"document_idle",persistAcrossSessions:true}]);
 }
 async function genericSetup(url) {
   const data=await genericConfig(),link=data.links.find(link=>link.url===url);
@@ -58,13 +58,13 @@ async function genericMessage(message,sender) {
   if(message.binding!==context.binding)throw new Error("账号已切换，请刷新此页面再配置");
   if(message.type!=="generic-import")throw new Error("未知通用识别操作");
   const rule=CampusGeneric.validateRule(message.rule);
-  if(!Array.isArray(message.tasks) || !message.tasks.length || message.tasks.length>200)throw new Error("请选择 1–200 项任务");
+  if(!Array.isArray(message.tasks) || message.tasks.length>200 || !message.tasks.length && message.empty!==true)throw new Error("请选择任务，或确认网站明确显示的空列表");
   const previous=context.rule;
   if(!message.confirmed && (!previous?.automatic || JSON.stringify(CampusGeneric.validateRule(previous.fields))!==JSON.stringify(rule)))throw new Error("此列表需要先预览确认");
   const tasks=message.tasks.map(item=>{
     if(!/^g:[a-f0-9]{64}$/.test(item.external_id) || typeof item.title!=="string" || !item.title.trim() || item.title.length>500 || new URL(item.source_url).origin!==new URL(sender.url).origin)throw new Error("读取结果格式不正确，请重新识别");
     if(!message.confirmed && !item.stable)throw new Error("任务缺少稳定链接，请重新预览确认");
-    return {external_id:item.external_id,title:item.title,content:"",due_at:item.due_at || null,course:String(item.course || "").slice(0,300),source_url:item.source_url,...(["todo","done"].includes(item.status)?{status:item.status}:{})};
+    return {external_id:item.external_id,title:item.title,content:"",due_at:item.due_at || null,course:String(item.course || "").slice(0,300),source_url:item.source_url,...(["todo","doing","done"].includes(item.status)?{status:item.status}:{})};
   });
   const current=await chrome.storage.local.get(["boardURL","account"]);
   if(genericBinding(current)!==context.binding)throw new Error("账号已切换，请刷新后重试");

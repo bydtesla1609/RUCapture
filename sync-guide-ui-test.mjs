@@ -30,10 +30,9 @@ try{
  });
  await context.addInitScript(()=>{if(location.origin==='https://rucapture.pages.dev')localStorage.setItem('ruchecklist-demo:personal','seen');});
  const page=await context.newPage();await page.goto(origin);
- // All ornamental nodes belong to one of the drawn curves.
- assert.ok(await page.locator('.landing-art svg').evaluate(svg=>[...svg.querySelectorAll('circle')].every(c=>[...svg.querySelectorAll('path')].some(p=>{const length=p.getTotalLength();for(let i=0;i<=length;i+=.5){const pt=p.getPointAtLength(i);if(Math.hypot(pt.x-c.cx.baseVal.value,pt.y-c.cy.baseVal.value)<1)return true;}return false;}))));
+ assert.equal(await page.locator('.cloud-core svg').count(),1);
  await page.locator('#password').fill('isolated-sync-test');await page.locator('#login-form button[type=submit]').click();await page.locator('#workspace').waitFor();
- await page.locator('#sources-button').click();await page.waitForFunction(()=>document.getElementById('install-state').textContent.includes('1.9.3'));
+ await page.locator('#sources-button').click();await page.waitForFunction(()=>document.getElementById('install-state').textContent.includes('1.9.5'));
  await page.locator('#sync-tab-5').click();assert.equal(await page.locator('#guide-install').isVisible(),true,'progress indicators cannot navigate');
  await page.locator('#collector-recheck').click();assert.equal(await page.locator('#guide-install').isVisible(),true);await page.locator('#sync-next').click();
  await page.locator('#account-setup').waitFor();assert.equal(await page.locator('#sync-tab-1').getAttribute('class'),'complete');

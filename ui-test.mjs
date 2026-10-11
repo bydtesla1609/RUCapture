@@ -229,7 +229,7 @@ try {
   assert.equal(await page.locator(".topbar,.focus-note,#sync-state").count(),0);
   assert.equal(await page.locator("#board [data-date='2026-10-02'] .day-task").count(),2);
   assert.equal(await page.locator("#board [data-date='2026-10-02'] .day-more").textContent(),"+1 项");
-  assert.equal(await page.locator(".day-list .task").count(),3);
+  assert.equal(await page.locator(".day-list .calendar-event").count(),3);
   // UTC 16:15 belongs to the next Beijing date; ranges include both ends.
   assert.equal(await page.locator("#board [data-date='2026-10-01'] .day-task").count(),1);
   await page.locator("[data-date='2026-10-08']").scrollIntoViewIfNeeded();
@@ -246,9 +246,9 @@ try {
   await page.getByRole("button",{name:"下个月",exact:true}).click();
   await page.locator(".undated-button").click();assert.equal(await page.locator(".day-list .task-title").textContent(),"待补充日期的导入任务");
   await page.locator("[data-date='2026-10-02']").click();
-  const homework=page.locator(".day-list .task").filter({has:page.locator("h3",{hasText:"数据结构"})});
+  const homework=page.locator(".day-list .calendar-event").filter({has:page.locator(".task-title",{hasText:"数据结构"})});
   const homeworkId=await homework.getAttribute("data-task-id");
-  await saved(page,()=>homework.locator(".task-status").selectOption("done"));
+  await homework.locator(".edit-task").click();await page.locator('#homework-status .select-trigger').click();await page.locator('#homework-status').getByRole('option',{name:'已完成',exact:true}).click();await saved(page,()=>page.locator('#save-task').click());await page.locator('#task-dialog').waitFor({state:'hidden'});
   await page.waitForFunction(()=>!document.querySelector("article[data-busy]"));
   let completed=database.prepare("SELECT completed_at,due_at,status FROM tasks WHERE id=?").get(homeworkId);
   assert.equal(completed.status,"done");assert.ok(completed.completed_at);assert.equal(completed.due_at,"2026-10-02T15:59:00.000Z");
@@ -267,12 +267,10 @@ try {
   await category(page,"总览").click();
   await page.evaluate(()=>{calendarMonth="2026-10";selectedDay="2026-10-02";renderCalendar();});
   assert.equal(await homework.count(),1);
-  // A failed direct status update preserves the task and shows its actual state.
+  // A failed editor save preserves both the draft and the stored task state.
   await page.route(`**/api/tasks/${homeworkId}`,route=>route.fulfill({status:409,contentType:"application/json",body:JSON.stringify({error:"任务已在其他设备修改，请刷新后重试"})}),{times:1});
-  await homework.locator(".task-status").selectOption("doing");
-  await page.waitForFunction(()=>!document.querySelector("article[data-busy]"));
-  assert.equal(await homework.locator(".task-status").inputValue(),"todo");
-  assert.match(await page.locator("#toast").textContent(),/其他设备/);
+  await homework.locator(".edit-task").click();await page.locator('#homework-status .select-trigger').click();await page.locator('#homework-status').getByRole('option',{name:'进行中',exact:true}).click();await page.locator('#save-task').click();await page.locator('#task-error').filter({hasText:'其他设备'}).waitFor();
+  assert.equal(await page.locator('#status').inputValue(),'doing');assert.equal(database.prepare('SELECT status FROM tasks WHERE id=?').get(homeworkId).status,'todo');await page.locator('#task-dialog .close-dialog').first().click();
   await mkdir("data/screenshots", {recursive: true});
   await page.screenshot({animations:"disabled",path:"data/screenshots/desktop.png",fullPage:true});
   await phone.evaluate(() => refresh()); await category(phone, "总览").click();
@@ -341,13 +339,12 @@ try {
   database.prepare("UPDATE tasks SET source_url=? WHERE title='教学周课表验证'").run(outline);await page.evaluate(()=>refresh());
   assert.equal(await category(page,"课程").count(),0);
   await category(page,"总览").click();await page.evaluate(day=>calendarSelect(day),weekStart);
-  const courseCard=page.locator('.day-list .task').filter({has:page.locator('h3',{hasText:'教学周课表验证'})});
+  const courseCard=page.locator('.day-list .calendar-event').filter({has:page.locator('.task-title',{hasText:'教学周课表验证'})});
   assert.equal(await courseCard.locator('.task-status').count(),0);
-  assert.equal(await courseCard.getByRole('link',{name:'教学大纲 ↗'}).getAttribute('href'),outline);
-  assert.equal(await courseCard.locator('.task-footer-main>a').count(),1);
-  await courseCard.locator('.edit-task').click();assert.equal(await page.locator('#done-field').isVisible(),false);
+  await courseCard.locator(".edit-task").click();assert.equal(await page.locator('#done-field').isVisible(),false);
+  assert.equal(await page.locator('#task-source').getByRole('link',{name:'教学大纲 ↗'}).getAttribute('href'),outline);
   await page.locator('#task-content').fill('课后复习笔记');await page.locator('#save-task').click();await page.locator('#task-dialog').waitFor({state:'hidden'});
-  assert.equal(await courseCard.locator('.task-content').textContent(),'课后复习笔记');
+  await courseCard.locator(".edit-task").click();assert.equal(await page.locator('#task-content').inputValue(),'课后复习笔记');await page.locator('#task-dialog .close-dialog').first().click();
   await category(page,"考试").click();assert.equal(await page.locator(".schedule-columns>.column").count(),2);assert.match(await page.locator(".exam-group").first().textContent(),/座位 · 28/);
   assert.equal(await page.locator("#count-open").evaluate(node=>getComputedStyle(node).color===getComputedStyle(document.body).color),true,"unfinished exams use normal text color");
   await page.screenshot({animations:"disabled",path:"data/screenshots/exams.png",fullPage:true});

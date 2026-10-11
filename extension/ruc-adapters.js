@@ -84,7 +84,7 @@ globalThis.RUCLists=(()=>{
       const headers=[...(heading?.children || [])].map(node=>node.textContent.trim());
       if(!headers.some(text=>/作业|考试|名称|标题/.test(text)))continue;
       recognized=true;
-      const dueIndex=headers.findIndex(text=>/截止|结束/.test(text)),statusIndex=headers.findIndex(text=>/完成|提交|状态/.test(text));
+      const dueIndex=headers.findIndex(text=>/截止|结束/.test(text)),statusIndex=headers.findIndex(text=>/完成|提交|状态|进度|通过题/.test(text));
       for(const row of table.querySelectorAll("tbody tr")) {
         const link=[...row.querySelectorAll("a[href]")].find(node=>/^\/index\.php\/index\/contest\/detail\/pno\/\d+\.html$/.test(new URL(node.getAttribute("href"),base).pathname) && node.textContent.trim() && !/^\d+$/.test(node.textContent.trim()));
         if(!link)continue;
@@ -92,7 +92,7 @@ globalThis.RUCLists=(()=>{
         const text=link.textContent.trim(),cells=[...row.children];
         if(!text)continue;
         const state=statusIndex<0?"":cells[statusIndex]?.textContent.trim();
-        const status=/^(?:已完成|已提交|全部通过|Accepted|AC)$/i.test(state)?"done":/^(?:未完成|未提交|待提交)$/.test(state)?"todo":null;
+        const status=CampusParsers.progress(state) || (/^(?:已完成|已提交|全部通过|Accepted|AC)$/i.test(state)?"done":/^(?:未完成|未提交|待提交)$/.test(state)?"todo":null);
         const deadline=dueIndex<0?null:cells[dueIndex]?.textContent.match(/\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?/g)?.at(-1);
         tasks.push({external_id:target.pathname.match(/\/pno\/(\d+)/)[1],content:text,course,due_at:CampusParsers.date(deadline),...(status?{status}:{}),source_url:target.href});
       }

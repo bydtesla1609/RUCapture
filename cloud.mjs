@@ -65,9 +65,10 @@ function recipeId(recipe) {
   return JSON.stringify([url.origin,url.pathname,clean(Object.fromEntries(url.searchParams)),clean(body)]);
 }
 export async function cloudStatus(env) {
-  const {results}=await env.DB.prepare("SELECT key,value FROM settings WHERE key='cloud_enabled' OR key LIKE 'cloud_state_%'").all();
+  const keys=["cloud_enabled",...sources.map(source=>`cloud_state_${source}`)];
+  const {results}=await env.DB.prepare(`SELECT key,value FROM settings WHERE key IN (${keys.map(()=>"?").join(",")})`).bind(...keys).all();
   const values=Object.fromEntries(results.map(row=>[row.key,row.value]));
-  return {available:!!env.CLOUD_ENCRYPTION_KEY,enabled:values.cloud_enabled==="1",interval_minutes:env.TRIAL_MODE?30:15,sources:Object.fromEntries(sources.map(source=>[source,JSON.parse(values[`cloud_state_${source}`] || "{}")]))};
+  return {available:!!env.CLOUD_ENCRYPTION_KEY,enabled:values.cloud_enabled==="1",interval_minutes:60,sources:Object.fromEntries(sources.map(source=>[source,JSON.parse(values[`cloud_state_${source}`] || "{}")]))};
 }
 export async function enableCloud(env) {await key(env);await put(env,"cloud_enabled","1");return {ok:true};}
 export async function revokeCloud(env) {

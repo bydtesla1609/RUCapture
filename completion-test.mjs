@@ -73,6 +73,14 @@ test("completion transitions, unchanged imports, automatic/manual archive and pr
     database.prepare("UPDATE tasks SET completed_at='2026-01-01T00:00:00Z' WHERE id=?").run(course.id);
     await autoArchive(env.DB);assert.equal((await api(`/api/tasks/${course.id}`)).data.archived_at,null,"courses never automatically archive");
 
+    for(const status of ["todo","done"]){
+      const record=(await api("/api/tasks","POST",{category:"记录",title:"记录长期保留",content:"原封不动",starts_at:"2025-01-01T00:00:00Z",status,todos:[{id:"keep",text:"保留待办",done:true}],links:[{label:"资料",url:"https://example.com/"}]})).data;
+      const before=database.prepare("SELECT * FROM tasks WHERE id=?").get(record.id);
+      await autoArchive(env.DB,Date.now()+365*86400000);
+      assert.deepEqual(database.prepare("SELECT * FROM tasks WHERE id=?").get(record.id),before,"records remain byte-for-byte unchanged after a year, including completed records");
+      assert.ok((await api("/api/board")).data.tasks.some(task=>task.id===record.id));
+    }
+
     // Exercise the extension's incremental cache against the real import API.
     let saved={enabled:true,boardURL:"https://campus-task-board.pages.dev",token};const requests=[];
     const noop={addListener(){}};
@@ -82,8 +90,8 @@ test("completion transitions, unchanged imports, automatic/manual archive and pr
     vm.runInContext(await readFile(new URL("./extension/background.js",import.meta.url),"utf8"),context);
     context.message={source:"smartestu",tasks:[{external_id:"course:cached",title:"增量任务",status:"done"}]};context.sender={url:"https://smartestu.cn/assignment",tab:{id:1}};
     await vm.runInContext("upload(message,sender)",context);await vm.runInContext("upload(message,sender)",context);
-    assert.equal(requests[0].tasks.length,1);assert.equal(requests[1].tasks.length,0);
-    context.message.tasks[0].status="todo";await vm.runInContext("upload(message,sender)",context);assert.equal(requests[2].tasks.length,1);
+    assert.equal(requests[0].tasks.length,1);assert.equal(requests.length,1,"unchanged checks do not upload a heartbeat within one hour");
+    context.message.tasks[0].status="todo";await vm.runInContext("upload(message,sender)",context);assert.equal(requests[1].tasks.length,1);
     await assert.rejects(()=>vm.runInContext("boardControl({command:'pair',token:'invalid'},{url:'https://evil.example',tab:{id:1},frameId:0})",context),/不允许/);
     context.boardSender={url:"https://campus-task-board.pages.dev/",tab:{id:2},frameId:0};context.pairToken=token;
     const paired=await vm.runInContext("boardControl({command:'pair',token:pairToken},boardSender)",context);
@@ -111,7 +119,7 @@ test("learning scan preserves signed course entry and repairs an old managed tab
   const context=vm.createContext({URL,AbortSignal,
     fetch:async()=>({ok:true,json:async()=>({sources:{chaoxing:{url:entry}}})}),
     chrome:{storage:{local:{get:async()=>structuredClone(saved),set:async value=>{saved={...saved,...structuredClone(value)};}}},
-      action:{onClicked:noop},runtime:{onMessage:noop,onStartup:noop,onInstalled:noop},alarms:{onAlarm:noop,clear:async()=>{},create:async()=>{}},
+      action:{onClicked:noop,setBadgeText:async()=>{}},runtime:{onMessage:noop,onStartup:noop,onInstalled:noop},alarms:{onAlarm:noop,clear:async()=>{},create:async()=>{}},
       tabs:{get:async id=>({id,active,url:"https://mooc1.chaoxing.com/visit/stucoursemiddle?courseid=course"}),
         create:async()=>({id:nextId++}),update:async(id,{url})=>updated.push({id,url}),reload:async()=>{throw new Error("Stale entry must be replaced");}}}});
   vm.runInContext(await readFile(new URL("./extension/background.js",import.meta.url),"utf8"),context);
@@ -122,7 +130,7 @@ test("learning scan preserves signed course entry and repairs an old managed tab
   assert.equal(updated.find(tab=>tab.url.includes("chaoxing.com")).url,entry);
   active=true;updated.length=0;saved.managedTabs={chaoxing:3};
   await vm.runInContext("start()",context);
-  assert.equal(updated.length,5);assert.ok(updated.every(tab=>tab.id!==3));
+  assert.equal(updated.length,0,"automatic scans do not recreate missing tabs or duplicate the active course page");
   saved.enabled=false;updated.length=0;
   await vm.runInContext("start()",context);assert.equal(updated.length,0);
 });

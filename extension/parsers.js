@@ -3,6 +3,14 @@
  * Only assignment-list responses are processed; cookies, tokens, answers and grades are never copied.
  */
 globalThis.CampusParsers = (() => {
+  function progress(value) {
+    const text=String(value ?? "").trim();
+    if(/^(?:部分(?:提交|完成|通过)|进行中|已开始|in progress|partially (?:submitted|completed))(?:[（(].*[)）])?$/i.test(text))return "doing";
+    const count=text.match(/^(?:(?:已)?(?:完成|提交|通过|解出)\s*[:：]?\s*(\d+)\s*\/\s*(\d+)\s*(?:题)?|(\d+)\s*\/\s*(\d+)\s*题|(?:已)?(?:完成|提交|通过)\s*(\d+)\s*题\s*[,，／/]?\s*(?:共|总计)\s*(\d+)\s*题)$/);
+    if(!count)return null;
+    const n=Number(count[1] ?? count[3] ?? count[5]),total=Number(count[2] ?? count[4] ?? count[6]);
+    return Number.isSafeInteger(total) && total>0 && n<=total ? n===total?"done":n>0?"doing":"todo" : null;
+  }
   function date(value) {
     if(value===null || value===undefined || value==="" || value===0 || value==="0") return null;
     let parsed;
@@ -24,6 +32,8 @@ globalThis.CampusParsers = (() => {
   }
   function parse(source,url,value,pageURL="") {
     const output=new Map(); let recognized=false;
+    const message=[value?.message,value?.msg,typeof value?.error==="string"?value.error:null].filter(text=>typeof text==="string").join(" ");
+    if(String(value?.code ?? value?.status)==="401" || /未登[录陆]|(?:登[录陆]|会话).{0,8}(?:失效|过期)|请.{0,5}(?:重新登[录陆]|先登[录陆])|not logged in|session expired/i.test(message))throw new Error("网站登录已过期，请重新登录后同步");
     if(source==="zhifz") {
       const request=new URL(url,"https://www.zhifz.com");
       if(request.origin!=="https://www.zhifz.com" || request.pathname!=="/yonghu_ceyan" || request.searchParams.get("类型")!=="2" || !/^\d{1,20}$/.test(request.searchParams.get("UID") || ""))return null;
@@ -42,6 +52,7 @@ globalThis.CampusParsers = (() => {
       return [...output.values()];
     }
     if(source==="smartestu" && /\/api\/homework\/student\/mark\/queryHomeworks(?:\?|$)/.test(url)) {
+      if(Array.isArray(value?.data?.courseHomeworkDTOList) && value.data.courseHomeworkDTOList.length===0)recognized=true;
       walk(value,course=>{
         if(!Object.hasOwn(course,"studentCourseHomeworkDTOList")) return;
         recognized=true;
@@ -60,7 +71,10 @@ globalThis.CampusParsers = (() => {
     }
     if(source==="ketangpai" && /\/(?:FutureV2\/CourseMeans\/getCourseContent|Futurev2\/Homework\/getListByCourseToStudent)(?:\?|$)/i.test(url)) {
       const homeworkOnly=/getListByCourseToStudent/i.test(url);
-      if(Array.isArray(value?.data?.list) && !value.data.list.length) recognized=true;
+      if(Array.isArray(value?.data?.list)) {
+        if(value.data.list.some(task=>!task || typeof task!=="object" || (homeworkOnly ? typeof task.title!=="string" || (task.id===undefined && task.homeworkid===undefined) : task.contenttype===undefined)))throw new Error("课堂派列表字段发生变化，请核对作业页面");
+        recognized=true;
+      }
       walk(value,task=>{
         if(String(task.contenttype)!=="4" && !(homeworkOnly && task.title && Object.hasOwn(task,"endtime"))) return;
         if(typeof task.title!=="string" || (task.id===undefined && task.homeworkid===undefined)) throw new Error("课堂派作业字段发生变化");
@@ -88,7 +102,8 @@ globalThis.CampusParsers = (() => {
       if(!id || !course || !row.title.trim()) continue;
       const statusText=row.status.trim();
       let status;
-      if(/未交|未提交|打回|退回|重做/.test(statusText)) status="todo";
+      if(progress(statusText))status=progress(statusText);
+      else if(/未交|未提交|打回|退回|重做/.test(statusText)) status="todo";
       else if(/待互[评評]/.test(statusText)) status="doing";
       else if(/已完成|已提交|已交|待批[阅閱改]|已批[阅閱改]|已互[评評]/.test(statusText)) status="done";
       const absolute=row.time.match(/\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?/);
@@ -109,5 +124,5 @@ globalThis.CampusParsers = (() => {
     if(document.querySelector(".ulDiv, .work-list") && /暂无作业|没有作业|暂无相关/.test(document.body?.textContent || "")) return [];
     return null;
   }
-  return {parse,date,chaoxing,chaoxingRows};
+  return {parse,date,progress,chaoxing,chaoxingRows};
 })();

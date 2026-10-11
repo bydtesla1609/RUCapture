@@ -1,6 +1,7 @@
 // Local, declarative DOM rules only. Never evaluate website-provided code.
 globalThis.CampusGeneric=(()=>{
   const compact=value=>String(value || "").replace(/\s+/g," ").trim();
+  const emptyList=text=>/^(?:暂无(?:作业|任务|相关作业|相关任务|数据)|没有(?:作业|任务)|no (?:assignments|tasks)(?: yet)?)[。.!！]?$/i.test(text);
   function pageKey(value) {
     const url=new URL(value);
     if(!["https:","http:"].includes(url.protocol) || url.username || url.password)throw new Error("页面地址不正确");
@@ -56,9 +57,13 @@ globalThis.CampusGeneric=(()=>{
       const headers=[...table.querySelectorAll('thead th,thead td,[role="columnheader"]')];
       if(!headers.length)headers.push(...table.querySelectorAll('tr:first-child th'));
       const index=pattern=>headers.findIndex(node=>pattern.test(text(node)));
-      const title=index(/作业|任务|名称|标题|assignment|homework|title/i),due=index(/截止|DDL|due|deadline|结束时间/i),status=index(/完成|提交|状态|status/i),course=index(/课程|科目|course/i);
+      const title=index(/作业|任务|名称|标题|assignment|homework|title/i),due=index(/截止|DDL|due|deadline|结束时间/i),status=index(/完成|提交|状态|进度|通过题|status|progress/i),course=index(/课程|科目|course/i);
       if(title<0)continue;
       const row=[...table.querySelectorAll('tbody tr,[role="row"]')].find(node=>visible(node) && node.querySelector('td,[role="cell"]'));
+      if(table.matches('table') && table.querySelector('tbody') && emptyList(text(table.querySelector('tbody')))){
+        const field=i=>i<0?"":`:scope > td:nth-child(${i+1})`;
+        candidates.push({rows:`${path(table.querySelector('tbody'))} > tr`,title:field(title),due:field(due),status:field(status),course:field(course)});continue;
+      }
       if(!row)continue;
       const field=i=>i<0 || !row.children[i]?"":path(row.children[i],row);
       if(!row.children[title])continue;
@@ -94,6 +99,7 @@ globalThis.CampusGeneric=(()=>{
     if(rows.length>200)throw new Error("当前页面超过 200 条，请分页面读取");
     const tasks=[],seen=new Set(),base=new URL(address);
     for(const row of rows){
+      if(!row.querySelector('a[href]') && emptyList(text(row)))continue;
       const get=key=>rule[key]===':scope'?row:rule[key]?row.querySelector(rule[key]):null,titleNode=get("title"),title=text(titleNode);
       if(!title || title.length>500)throw new Error("任务标题缺失或过长，请重新点选标题");
       const anchors=titleNode.matches('a[href]')?[titleNode]:[...titleNode.querySelectorAll('a[href]')];
@@ -106,7 +112,7 @@ globalThis.CampusGeneric=(()=>{
       if(seen.has(external_id))throw new Error("列表含同名且无法区分的任务，请点选各自的标题链接后重试");
       seen.add(external_id);
       const state=text(get('status')).replace(/^(?:提交状态|完成状态|状态)[:：]?\s*/,"");
-      const status=/^(?:已完成|已提交|待批阅|已批阅|已批改|completed|submitted)$/i.test(state)?'done':/^(?:未完成|未提交|待提交|待重做|已退回|not submitted|incomplete)$/i.test(state)?'todo':null;
+      const status=globalThis.CampusParsers?.progress(state) || (/^(?:已完成|已提交|待批阅|已批阅|已批改|completed|submitted)$/i.test(state)?'done':/^(?:未完成|未提交|待提交|待重做|已退回|not submitted|incomplete)$/i.test(state)?'todo':null);
       tasks.push({external_id,title,content:"",due_at:deadline(get('due')),...(status?{status}:{}),course:text(get('course')).slice(0,300),source_url:link || address,stable:!!link});
     }
     return tasks;

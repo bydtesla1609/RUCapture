@@ -77,6 +77,8 @@ async function upload(message,sender,generic=false) {
   }
   if(!Array.isArray(tasks) || tasks.length>3000 || tasks.some(task=>!task || typeof task.external_id!=="string")) throw new Error("任务列表格式不正确");
   const cache=importCache[source] || {},changedTasks=tasks.filter(task=>cache[task.external_id]!==JSON.stringify(task));
+  const previous=sourceResults[source];
+  if(!changedTasks.length && !message.error && !previous?.error && previous?.count===tasks.length && Date.now()-Date.parse(previous.time)<3600000)return {ok:true,changed:0,cached:true};
   const batches=[];for(let i=0;i<changedTasks.length;i+=30) batches.push(changedTasks.slice(i,i+30));
   if(!batches.length) batches.push([]);
   let changed=0;
@@ -92,9 +94,9 @@ async function upload(message,sender,generic=false) {
   await chrome.action.setBadgeText({text:Object.values(sourceResults).some(value=>value.error)?"!":""});
   return {ok:true,changed};
 }
-async function performScan(force=false,academicOnly=false,onlySource) {
+async function performScan(force=false,academicOnly=false,onlySource,automatic=false) {
   if(onlySource!==undefined && !Object.hasOwn(SOURCES,onlySource) && !onlySource.startsWith("web:"))throw new Error("未知同步来源");
-  const {enabled,boardURL,token,managedTabs={},sourceURLs={}}=await chrome.storage.local.get(["enabled","boardURL","token","managedTabs","sourceURLs"]);
+  const {enabled,boardURL,token,managedTabs={},sourceURLs={},scanAttempts={},sourceResults={}}=await chrome.storage.local.get(["enabled","boardURL","token","managedTabs","sourceURLs","scanAttempts","sourceResults"]);
   if(!boardURL || !token) throw new Error("请先连接看板");
   if(!enabled && !force) throw new Error("自动同步已暂停，请先开启同步");
   const response=await fetch(`${boardURL}/api/collector-config`,{headers:{Authorization:`Bearer ${token}`},credentials:"omit",signal:AbortSignal.timeout(15000)});
@@ -107,33 +109,46 @@ async function performScan(force=false,academicOnly=false,onlySource) {
   if(!selected.length)throw new Error("请在网页的第 3 步保存已适配网站的链接");
   await chrome.storage.local.set({configuredSources:[...new Set(entries.map(link=>link.source))]});
   for(const [index,{source,url:address}] of selected.entries()) {
+    // Cloud collection does not need a browser tab. Explicit per-site recovery and grants do.
+    if(!force && !onlySource && config.cloud_enabled && config.cloud_sources?.[source]?.authorized)continue;
     const candidate=new URL(address);
     if(source.startsWith("web:")){
       if(source!==`web:${candidate.origin}` || !["https:","http:"].includes(candidate.protocol) || candidate.username || candidate.password)throw new Error("通用网站地址不正确");
       if(!await chrome.permissions.contains({origins:[`${candidate.origin}/*`]})){await reportError("请在第 3 步点击“识别设置”，允许读取此网站并确认预览。",source);continue;}
-      const key=`${source}:${address}`;let tab;
-      try{tab=await chrome.tabs.get(managedTabs[key]);}catch{}
-      if(tab && !tab.active && CampusGeneric.pageKey(tab.url)===CampusGeneric.pageKey(address))await chrome.tabs.reload(tab.id);
-      else {const created=await chrome.tabs.create({url:address,active:false});managedTabs[key]=created.id;}
+      await visit(source,address,`${source}:${address}`);
       continue;
     }
     if((candidate.protocol!=="https:" && !(source==="yoj" && candidate.protocol==="http:")) || candidate.username || candidate.password || sourceFor(candidate.href)!==source) throw new Error(`${source} 作业页地址不正确`);
     const url=candidate.href;
     const key=config.links===undefined?source:`${source}:${url}`;
-    let tab;try{if(managedTabs[key]) tab=await chrome.tabs.get(managedTabs[key]);}catch{}
-    if(tab && !tab.active && tab.url && sourceFor(tab.url)===source) {
-      if(source==="chaoxing" || tab.url!==url) await chrome.tabs.update(tab.id,{url});
+    await visit(source,url,key);
+  }
+  await chrome.storage.local.set({managedTabs});return {ok:true};
+  async function visit(source,url,key) {
+    let tab;try{if(managedTabs[key])tab=await chrome.tabs.get(managedTabs[key]);}catch{}
+    if(automatic && sourceResults[source]?.error)return;
+    if(tab){
+      let matches=false;try{matches=source.startsWith("web:")?CampusGeneric.pageKey(tab.url)===CampusGeneric.pageKey(url):sourceFor(tab.url)===source;}catch{}
+      if(automatic && !matches){await reportError("同步页已跳转，自动打开已暂停。请检查网站登录后点击该网站的“同步”。",source);return;}
+      // Never navigate away from a page the user is using, nor create a second copy.
+      if(tab.active){
+        if(!automatic && tab.url===url)await chrome.tabs.reload(tab.id);
+        else {try{await chrome.tabs.sendMessage(tab.id,{type:"read-current"});}catch{}if(!automatic)await reportError("同步页正在使用，请在该页返回已保存的列表地址后点击同步。",source);}
+        return;
+      }
+      if(tab.url!==url || source==="chaoxing")await chrome.tabs.update(tab.id,{url});
       else await chrome.tabs.reload(tab.id);
-    }else {
+    }else{
+      if(automatic && (scanAttempts[key] || managedTabs[key])){await reportError("同步页已关闭，自动打开已暂停。需要时请点击该网站的“同步”。",source);return;}
+      scanAttempts[key]=true;await chrome.storage.local.set({scanAttempts});
       const created=await chrome.tabs.create({url:"about:blank",active:false});managedTabs[key]=created.id;
       await chrome.storage.local.set({managedTabs});await chrome.tabs.update(created.id,{url});
     }
   }
-  await chrome.storage.local.set({managedTabs});return {ok:true};
 }
-function scan(force=false,source) {
+function scan(force=false,source,automatic=false) {
   if(scanning) return Promise.reject(new Error("正在打开同步页面，请稍后重试"));
-  return scanning=performScan(force,false,source).finally(()=>{scanning=null;});
+  return scanning=performScan(force,false,source,automatic).finally(()=>{scanning=null;});
 }
 async function configure() {
   const {enabled}=await chrome.storage.local.get("enabled");await chrome.alarms.clear("collect");
@@ -153,7 +168,7 @@ async function boardControl(message,sender) {
     const previous=await chrome.storage.local.get(["boardURL","account"]);
     const changed=previous.boardURL!==origin || (previous.account || "personal")!==(configuration.account || "personal");
     const configured=(configuration.links || Object.keys(SOURCES).map(source=>({source}))).flatMap(link=>link.source==="ruc_courses"?["ruc_courses","ruc_exams"]:link.source?[link.source]:[]);
-    await chrome.storage.local.set({boardURL:origin,account:configuration.account || "personal",token:message.token,enabled:true,configuredSources:configured,importCache:{},sourceResults:{},managedTabs:{},sourceURLs:{},...(changed?{cloudEnabled:false,cloudZhifzEnabled:false,cloudRucListsEnabled:false,cloudRecipeCache:{},cloudSourceResults:{},genericPending:null,genericReview:null}:{})});await configure();
+    await chrome.storage.local.set({boardURL:origin,account:configuration.account || "personal",token:message.token,enabled:true,configuredSources:configured,importCache:{},sourceResults:{},sourceURLs:{},...(changed?{managedTabs:{},scanAttempts:{},cloudEnabled:false,cloudZhifzEnabled:false,cloudRucListsEnabled:false,cloudRecipeCache:{},cloudSourceResults:{},genericPending:null,genericReview:null}:{})});await configure();
     if(typeof registerGeneric==="function")await registerGeneric((configuration.links || []).filter(link=>link.generic));
   }
   const data=await chrome.storage.local.get(["boardURL","token","enabled","sourceResults","lastResult","account"]);
@@ -214,8 +229,8 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     (message.type==="scan"?scan():configure()).then(reply).catch(error=>{reportError(error);reply({error:error.message});});return true;
   }
 });
-chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==="collect") scan().catch(reportError);});
-async function start() {await configure();const {enabled}=await chrome.storage.local.get("enabled");if(enabled) await scan();}
+chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==="collect") scan(false,undefined,true).catch(reportError);});
+async function start() {await configure();const {enabled}=await chrome.storage.local.get("enabled");if(enabled) await scan(false,undefined,true);}
 chrome.runtime.onStartup.addListener(()=>start().catch(reportError));
 chrome.runtime.onInstalled.addListener(async()=>{
   const {reopenAfterReload}=await chrome.storage.local.get("reopenAfterReload");

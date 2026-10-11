@@ -63,7 +63,7 @@ try{
   await phone.locator('#messages-read').click();await phone.locator('#messages-dialog').waitFor({state:'hidden'});await phone.locator('#categories button').filter({has:phone.locator('span',{hasText:/^活动$/})}).click();
   const card=phone.locator('article.task').first();await card.locator('.archive-task').click();await card.waitFor({state:'hidden'});await accountEntry(phone,'archive-button');await phone.getByRole('button',{name:'恢复归档：近期活动',exact:true}).click();await phone.locator('#archive-list .archive-empty').waitFor();await phone.getByRole('button',{name:'关闭归档',exact:true}).click();await card.waitFor();
   // Deletion is cancellable; the server keeps the task until explicit confirmation.
-  await card.locator('.delete-task').click();await phone.locator('#delete-dialog .close-dialog').click();assert.equal(await card.count(),1);
+  await card.locator('.delete-task').click();await phone.locator('#delete-dialog .dialog-actions .close-dialog').click();assert.equal(await card.count(),1);
   await card.locator('.edit-task').click();await phone.locator('#add-link').click();const link=phone.locator('.link-edit-row');
   await phone.getByRole('button',{name:'移除链接',exact:true}).click();await phone.locator('#action-confirm-cancel').click();assert.equal(await link.count(),1);
   await phone.getByRole('button',{name:'移除链接',exact:true}).click();await phone.locator('#action-confirm-accept').click();await link.waitFor({state:'detached'});assert.equal(await link.count(),0);

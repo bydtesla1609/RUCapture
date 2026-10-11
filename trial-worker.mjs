@@ -5,7 +5,7 @@ import {community} from "./community.mjs";
 const userEnvironment=(env,user)=>({...env,DB:partition(accountDatabase(env,user.slot),user.slot),BOARD_PASSWORD_HASH:"trial-authenticated",SOURCE_URLS:"{}",TRIAL_MODE:true,TRIAL_USER:user.id});
 export async function runTrialCloud(env,scheduledTime=Date.now(),options={}) {
   if(env.CLOUD_DISPATCH){
-    const minute=Math.floor(scheduledTime/60000),slots=Array.from({length:10},(_,i)=>minute%30+1+i*30);
+    const minute=Math.floor(scheduledTime/60000),slots=Array.from({length:5},(_,i)=>minute%60+1+i*60);
     const {results:accounts}=await env.DB.prepare(`SELECT slot FROM trial_users WHERE status='active' AND slot IN (${slots.map(()=>"?").join(",")})`).bind(...slots).all();
     const results=[];
     for(let offset=0;offset<accounts.length;offset+=3){
@@ -20,7 +20,8 @@ export async function runTrialCloud(env,scheduledTime=Date.now(),options={}) {
     return results;
   }
   // Local fixture and legacy single-slot scheduler.
-  const slot=Math.floor(scheduledTime/60000)%30+1;
+  const slot=Math.floor(scheduledTime/60000)%60+1;
+  if(slot>30)return {skipped:true};
   const user=await env.DB.prepare("SELECT id,slot FROM trial_users WHERE slot=? AND status='active'").bind(slot).first();
   if(!user)return {skipped:true};
   const scoped=userEnvironment(env,user);
@@ -169,7 +170,13 @@ async function route(request,env) {
     await db.batch([db.prepare("INSERT INTO trial_collectors(hash,user_id) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET hash=excluded.hash").bind(hash,user.id),scoped.DB.prepare("INSERT INTO settings(key,value) VALUES ('collector_hash',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(hash)]);
     return json({token:collector});
   }
-  return board.fetch(request,scoped);
+  const response=await board.fetch(request,scoped);
+  if(path==="/api/sync" && method==="GET" && response.ok){
+    const data=await response.json();
+    const unread=await community(new Request(new URL("/api/feedback/unread",url)),env,user,{body,limit});
+    return json({...data,unread:(await unread.json()).total});
+  }
+  return response;
 }
 export default {async scheduled(event,env,ctx){ctx.waitUntil(runTrialCloud(env,event.scheduledTime));},async fetch(request,env){
   let response;try {response=await route(request,env);}catch(error){response=json({error:error.status?error.message:"请求未完成，请稍后重试"},error.status || 500);}

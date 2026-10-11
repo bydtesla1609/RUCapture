@@ -46,18 +46,18 @@ try{
  // Start from axes, visit both views (and back), then restore the unsaved layout.
  await page.locator('.axis-head').focus();await page.keyboard.press('ArrowDown');
  const layout=await page.evaluate(()=>JSON.stringify(axisScene));
- await page.locator('#demo-button').click();await page.locator('#demo-progress').filter({hasText:'1 / 9'}).waitFor();
+ await page.locator('#demo-button').click();await page.locator('#demo-progress').filter({hasText:'1 / 11'}).waitFor();
  assert.equal(await page.evaluate(()=>overviewView),'calendar');assert.equal(await page.locator('.calendar-grid').isVisible(),true);
- await page.locator('#demo-next').click();await page.locator('#demo-progress').filter({hasText:'2 / 9'}).waitFor();assert.equal(await page.locator('.axes-canvas').isVisible(),true);
+ await page.locator('#demo-next').click();await page.locator('#demo-progress').filter({hasText:'2 / 11'}).waitFor();assert.equal(await page.locator('.axes-canvas').isVisible(),true);
  await page.locator('#demo-prev').click();assert.equal(await page.evaluate(()=>overviewView),'calendar');await page.locator('#demo-skip').click();
  assert.equal(await page.evaluate(()=>overviewView),'axes');assert.equal(await page.evaluate(()=>JSON.stringify(axisScene)),layout);
  // Keep website requests unresolved: 6 -> 7 must render immediately, even on return.
  const pending=[];await page.route('**/api/source-links',route=>pending.push(route));
- await page.locator('#demo-button').click();for(let i=0;i<5;i++)await page.locator('#demo-next').click();
+ await page.locator('#demo-button').click();for(let i=0;i<7;i++)await page.locator('#demo-next').click();
  for(let attempt=0;attempt<3;attempt++){
-  await page.locator('#demo-next').click();await page.waitForFunction(()=>document.getElementById('demo-progress').textContent==='7 / 9' && !document.getElementById('demo-next').disabled,null,{timeout:500});
+  await page.locator('#demo-next').click();await page.waitForFunction(()=>document.getElementById('demo-progress').textContent==='9 / 11' && !document.getElementById('demo-next').disabled,null,{timeout:500});
   assert.equal(await page.locator('#website-setup').isVisible(),true);
-  await page.locator('#demo-prev').click();assert.equal(await page.locator('#demo-progress').textContent(),'6 / 9');
+  await page.locator('#demo-prev').click();assert.equal(await page.locator('#demo-progress').textContent(),'8 / 11');
  }
  await page.locator('#demo-next').click();assert.equal(pending.length,1,'returning to a demo step does not repeat network checks');
  await pending[0].fulfill({contentType:'application/json',body:JSON.stringify({links:Array.from({length:5},(_,i)=>({name:`示例课程 ${i+1}`,url:`https://example.com/course/${i}`,source:'web:https://example.com',generic:true}))})});await page.unroute('**/api/source-links');
@@ -123,7 +123,7 @@ try{
  await page.locator('#user-menu-toggle').click();await page.locator('#messages-button').click();await page.locator('#messages-dialog').waitFor();assert.equal(await page.locator('.release-entry:visible').count(),1);await page.locator('#messages-read').click();
  await page.setViewportSize({width:390,height:844});
  // Real detector UI, with an isolated extension message double. No auto advance.
- await page.evaluate(()=>addEventListener('message',event=>{if(event.data?.kind==='campus-board-command')postMessage({kind:'campus-board-reply',id:event.data.id,result:{version:'1.9.3',connected:false,enabled:true,sourceResults:{}}},location.origin);}));
+ await page.evaluate(()=>addEventListener('message',event=>{if(event.data?.kind==='campus-board-command')postMessage({kind:'campus-board-reply',id:event.data.id,result:{version:'1.9.5',connected:false,enabled:true,sourceResults:{}}},location.origin);}));
  await page.locator('#sources-button').click();await page.locator('#guide-install').waitFor();await page.locator('#collector-recheck').click();
  const notice=page.locator('#guide-install .dialog-notice');await notice.filter({hasText:'扩展已就绪'}).waitFor();
  await notice.scrollIntoViewIfNeeded();
@@ -132,7 +132,7 @@ try{
  await page.screenshot({path:'data/screenshots/detection-notice-mobile.png',animations:'disabled'});
  await page.setViewportSize({width:1440,height:1000});await page.locator('#collector-recheck').click();await notice.waitFor();await page.screenshot({path:'data/screenshots/detection-notice-desktop.png',animations:'disabled'});
  assert.deepEqual(errors,[]);
- console.log('PASS: responsive login brand/archive rows/release history; consistent empty boards; immediate repeatable 6→7 tour with delayed network; calendar/axes restoration; nested axis draft/resource preservation; modal detection notice; 320–1440px layouts.');
+ console.log('PASS: responsive login brand/archive rows/release history; consistent empty boards; immediate repeatable 8→9 tour with delayed network; calendar/axes restoration; nested axis draft/resource preservation; modal detection notice; 320–1440px layouts.');
 }finally{
  await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));database.close();
  if(dirname(resolve(directory))!==root)throw Error('Unsafe cleanup path');await rm(directory,{recursive:true,force:true});

@@ -27,8 +27,8 @@ function renderRecords(records){
   $("board").className="record-board";
   const ordered=[...records].sort((a,b)=>-chronological(a,b));
   $("board").replaceChildren(...[["todo","待完善"],["done","已完善"]].map(([state,title])=>{
-    const section=element("section",null,`column record-column ${state}`),items=ordered.filter(task=>(task.status==="done"?"done":"todo")===state),heading=element("h2",title);
-    heading.append(element("span",String(items.length),"count"));section.append(heading);
+    const section=element("section",null,`column record-column ${state}`),items=ordered.filter(task=>(task.status==="done"?"done":"todo")===state);
+    section.append(groupHeading(title,items.length));
     const list=element("div",null,"schedule-list record-group");
     if(items.length)list.append(...items.map(card));else list.append(emptySchedule(title,"记录",state==="todo"));section.append(list);
     return section;
@@ -43,7 +43,7 @@ function renderAxisMembers(){
   root.append(element("h3",`卡片 · ${items.length}`));
   if(!items.length)root.append(element("p","尚无卡片","hint"));
   for(const task of items){
-    const row=element("div",null,"axis-member"),info=element("div");info.append(element("strong",task.title),element("small",`${task.category} · ${formatTime(cardTime(task))}${task.archived_at?" · 已归档":""}`));
+    const row=element("div",null,"axis-member"),info=element("div"),meta=element("small",null,"task-kind"),quadrant=taskQuadrantBadge(task);meta.append(element("span",task.category));if(quadrant)meta.append(quadrant);meta.append(element("span",`${formatTime(cardTime(task))}${task.archived_at?" · 已归档":""}`));info.append(element("strong",task.title),meta);
     const edit=element("button","编辑","text-button"),detach=element("button","离轴","text-button");edit.type=detach.type="button";
     edit.onclick=()=>openTask(task);detach.onclick=async()=>{detach.disabled=true;try{await api(`/api/tasks/${task.id}`,"PATCH",{axis_id:null,revision:task.revision});lastPayload="";await refresh();renderAxisMembers();}catch(error){notice(error.message);detach.disabled=false;}};
     row.append(info,edit,detach);root.append(row);
@@ -104,17 +104,26 @@ function renderAxes(){
       const kind=j===0?"head":j===line.nodes.length-1?"tail":"card",task=axisItems.find(t=>t.id===node.id),label=kind==="head"?axis.title:kind==="tail"?"添加卡片":task.title;
       const g=svgElement("g",{class:`axis-node axis-${kind}`,"data-line":i,"data-node":j,"data-kind":kind,role:"button",tabindex:"0","aria-label":`${kind==="head"?"编辑轴线":kind==="tail"?"添加卡片到轴线":"编辑卡片"}：${kind==="tail"?axis.title:label}`});
       g.append(svgElement("title",{},label));
-      if(kind==="head"){g.append(svgElement("rect",{x:-34,y:-14,width:68,height:28,rx:9}),svgElement("text",{"text-anchor":"middle",y:4},label.length>5?label.slice(0,5)+"…":label));}
+      if(kind==="head"){g.append(svgElement("rect",{x:-34,y:-14,width:68,height:28,rx:9}),svgElement("text",{"text-anchor":"middle",y:4},label));}
       else{
         const record=task?.category==="记录",done=task?.status==="done";
         g.append(svgElement("circle",{r:11,class:record?"record-dot":done?"done-dot":"open-dot"}));
         if(kind==="card" && done && !record)g.append(svgElement("path",{d:"M-5 0l3 3 6-7",class:"node-check"}));
-        g.append(svgElement("text",kind==="tail"?{"text-anchor":"middle",y:4}:{x:17,y:-18},kind==="tail"?"+":label.length>18?label.slice(0,18)+"…":label));
+        if(kind==="tail")g.append(svgElement("text",{"text-anchor":"middle",y:4},"+"));
+        else {g.append(svgElement("text",{"text-anchor":"middle",x:0,y:-25,class:"axis-node-date"},formatTime(cardTime(task))),svgElement("text",{"text-anchor":"middle",x:0,y:34,class:"axis-node-title"},label.length>18?label.slice(0,18)+"…":label));}
       }
       g.prepend(svgElement("circle",{r:23,class:"node-hit"}));
       group.append(g);return g;
     });world.append(group);groups.push({path,nodes});
   });
+  // Measure rendered SVG text, so Chinese and Latin titles get their actual width.
+  groups.forEach((group,i)=>{
+    const head=group.nodes[0],text=head.querySelector("text"),rect=head.querySelector("rect"),width=Math.max(68,text.getComputedTextLength()+24);
+    rect.setAttribute("x",String(-width/2));rect.setAttribute("width",String(width));
+    scene.lines[i].headWidth=width;
+    const nodes=scene.lines[i].nodes,shift=Math.max(0,nodes[0].x+width/2+48-nodes[1].x);for(let j=1;j<nodes.length;j++)nodes[j].x+=shift;
+  });
+  if(!savedAxisLayout && !scene.dirty && scene.camera.x===90)scene.camera.x=Math.max(90,...scene.lines.map(line=>line.headWidth/2+24));
   function paint(){
     paths=CaptureLayout.project(scene.lines,scene.pivot,112,scene.anchor);
     groups.forEach((group,i)=>{group.path.setAttribute("d",paths[i].map((p,j)=>`${j?"L":"M"}${p.x},${p.y}`).join(" "));scene.lines[i].nodes.forEach((node,j)=>group.nodes[j].setAttribute("transform",`translate(${node.x},${CaptureLayout.interpolate(paths[i],node.x)})`));});
@@ -124,10 +133,10 @@ function renderAxes(){
   const local=event=>{const rect=svg.getBoundingClientRect();return {x:event.clientX-rect.left,y:event.clientY-rect.top};};
   const worldPoint=p=>({x:(p.x-scene.camera.x)/scene.camera.z,y:(p.y-scene.camera.y)/scene.camera.z});
   function zoom(factor,p){const before=worldPoint(p);scene.camera.z=Math.max(.25,Math.min(2.5,scene.camera.z*factor));scene.camera.x=p.x-before.x*scene.camera.z;scene.camera.y=p.y-before.y*scene.camera.z;changed();paint();}
-  const center=()=>({x:svg.clientWidth/2,y:svg.clientHeight/2});buttons.plus.onclick=()=>zoom(1.2,center());buttons.minus.onclick=()=>zoom(1/1.2,center());buttons.reset.onclick=()=>{scene.camera={x:90,y:80,z:1};changed();paint();};
+  const center=()=>({x:svg.clientWidth/2,y:svg.clientHeight/2});buttons.plus.onclick=()=>zoom(1.2,center());buttons.minus.onclick=()=>zoom(1/1.2,center());buttons.reset.onclick=()=>{scene.camera={x:Math.max(90,...scene.lines.map(line=>line.headWidth/2+24)),y:80,z:1};changed();paint();};
   svg.addEventListener("wheel",event=>{event.preventDefault();if(event.shiftKey){scene.camera.x-=event.deltaY;changed();paint();}else zoom(Math.exp(-event.deltaY*.0015),local(event));},{passive:false});
   function activate(target){const line=scene.lines[+target.dataset.line],node=line.nodes[+target.dataset.node];if(target.dataset.kind==="head")openAxis(axes.find(a=>a.id===line.id));else if(target.dataset.kind==="tail")addOnAxis(line.id);else openTask(axisItems.find(t=>t.id===node.id));}
-  function moveNode(i,j,point){const nodes=scene.lines[i].nodes;nodes[j].x=Math.max(j>0?nodes[j-1].x+64:-20000,Math.min(j<nodes.length-1?nodes[j+1].x-64:20000,point.x));nodes[j].y=Math.max(-20000,Math.min(20000,point.y));scene.pivot=i;scene.anchor=j;changed();paint();}
+  function moveNode(i,j,point){const nodes=scene.lines[i].nodes;nodes[j].x=Math.max(j>0?nodes[j-1].x+(j===1?Math.max(64,(scene.lines[i].headWidth || 68)/2+48):64):-20000,Math.min(j<nodes.length-1?nodes[j+1].x-(j===0?Math.max(64,(scene.lines[i].headWidth || 68)/2+48):64):20000,point.x));nodes[j].y=Math.max(-20000,Math.min(20000,point.y));scene.pivot=i;scene.anchor=j;changed();paint();}
   svg.oncontextmenu=event=>event.preventDefault();
   svg.onpointerdown=event=>{
     if(event.button!==0)return;const p=local(event);pointers.set(event.pointerId,p);svg.setPointerCapture(event.pointerId);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {readFile,mkdir} from "node:fs/promises";
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || "playwright"),browser=await chromium.launch({headless:true});
-const files=await Promise.all(["generic-parser.js","generic-content.js"].map(name=>readFile(new URL(`./extension/${name}`,import.meta.url),"utf8")));
+const files=await Promise.all(["parsers.js","generic-parser.js","generic-content.js"].map(name=>readFile(new URL(`./extension/${name}`,import.meta.url),"utf8")));
 const table='<main><table><thead><tr><th>作业名称</th><th>截止时间</th><th>状态</th></tr></thead><tbody><tr><td><a href="/work/1">第一次作业</a></td><td>2026/10/12 22:00</td><td>未提交</td></tr><tr><td><a href="/work/2">第二次作业</a></td><td>2026-10-13 23:00</td><td>已结束</td></tr><tr><td><a href="/work/3">不需要的条目</a></td><td>2026-10-14 22:00</td><td>已完成</td></tr></tbody></table></main>';
 let saved=null,html='<form>'+table.replace('第一次作业</a>','第一次作业</a><span hidden>must-not-copy</span><input value="must-not-copy"><textarea hidden>must-not-copy</textarea>')+'</form>',imports=[];
 try {
@@ -63,6 +63,9 @@ try {
   await open();await ui.getByRole('button',{name:'RUChecklist · 读取任务',exact:true}).waitFor();assert.equal(imports.length,1);
   await ui.getByRole('button',{name:'RUChecklist · 读取任务',exact:true}).click();
   await page.locator('tbody tr').nth(1).locator('td').first().evaluate(node=>node.textContent='第一次作业');await ui.getByRole('button',{name:'重新读取',exact:true}).click();await ui.locator('[role=status]').filter({hasText:'无法区分'}).waitFor();assert.equal(await ui.getByRole('button',{name:'确认导入并保存规则'}).isDisabled(),true);
+  saved=null;imports=[];html=table.replace(/<tbody>[\s\S]*?<\/tbody>/,'<tbody><tr><td colspan="3">暂无作业</td></tr></tbody>');
+  await open('https://class.example/empty');await ui.getByRole('button',{name:'确认空列表并保存规则',exact:true}).click();await ui.locator('[role=status]').filter({hasText:'已导入 0 项'}).waitFor();assert.equal(imports[0].empty,true);assert.equal(imports[0].tasks.length,0);
+  html=table.replace('未提交','已完成 2/5 题');await open('https://class.example/empty');await page.waitForFunction(()=>messages.some(m=>m.type==='generic-import' && m.tasks.length>0));assert.equal(imports.at(-1).tasks[0].status,'doing','empty-list rules still recognize partial completion after tasks appear');
   assert.deepEqual(errors,[]);
   console.log('PASS: local preview before import, selection, manual field picking without navigation, saved rules, pagination-stable IDs, completion updates, ambiguous identities require review, and mobile panel. Synthetic website and extension bridge; user browser untouched.');
 } finally {await browser.close();}

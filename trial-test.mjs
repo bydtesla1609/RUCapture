@@ -111,14 +111,14 @@ if(!process.env.TRIAL_UI_FIXTURE) test("trial cloud grants, encrypted recipes an
     await b.api("/api/source-links","PUT",{urls:["https://smartestu.cn/assignment"]});
     assert.equal((await anonymous.api("/api/cloud-credentials","POST",recipe,grant)).status,200);
     assert.equal((await b.api("/api/cloud")).data.enabled,false);
-    assert.equal((await a.api("/api/cloud")).data.interval_minutes,30);
+    assert.equal((await a.api("/api/cloud")).data.interval_minutes,60);
     const ciphertext=db.prepare("SELECT value FROM u1_settings WHERE key='cloud_credential_smartestu'").get().value;
     assert.ok(!ciphertext.includes("synthetic"));assert.ok(!JSON.stringify((await a.api("/api/cloud")).data).includes("cookie"));
     let reads=0;const fetcher=async(url,options)=>{reads++;assert.equal(options.headers.cookie,"session=synthetic-trial-cookie");return url.endsWith("/api/auth/session")?Response.json({sessionContext:"synthetic-context",csrfToken:"synthetic-csrf"}):Response.json({data:{pageNo:1,pageTotal:1,courseHomeworkDTOList:[{studentCourseHomeworkDTOList:[{id:"trial-cloud-work",name:"Cloud assignment",submission_status:"completed"}]}]}});};
     assert.equal((await runTrialCloud(env,0,{fetcher})).smartestu.changed,1);
     const task=(await a.api("/api/board")).data.tasks[0];assert.equal(task.status,"done");assert.equal((await b.api("/api/board")).data.tasks.length,0);
     const requests=reads;await runTrialCloud(env,60000,{fetcher});assert.equal(reads,requests);
-    assert.equal((await runTrialCloud(env,1800000,{fetcher})).smartestu.changed,0);
+    assert.equal((await runTrialCloud(env,3600000,{fetcher})).smartestu.changed,0);
     assert.equal((await a.api("/api/board")).data.tasks[0].revision,task.revision);
     await anonymous.api("/api/cloud-authorize","POST",{},grantB);
     db.prepare("INSERT INTO u2_settings(key,value) VALUES ('cloud_credential_smartestu',?)").run(ciphertext);

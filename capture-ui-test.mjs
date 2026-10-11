@@ -59,7 +59,7 @@ try {
   assert.equal(await page.locator('.sidebar-divider').evaluate(n=>getComputedStyle(n).transform),'matrix(1, 0, 0, 1, -5, 0)');
   await page.locator('#sidebar-toggle').click();
   await page.locator('[data-view="axes"]').click();await page.getByRole('button',{name:'＋ 添加轴线',exact:true}).click();
-  await page.locator('#axis-title').fill('学会摄影');await page.locator('#axis-content').fill('观察日常的光');await page.locator('#axis-save').click();await page.locator('#axis-dialog').waitFor({state:'hidden'});
+  await page.locator('#axis-title').fill('学会摄影：从观察光线到完成自己的第一本摄影集');await page.locator('#axis-content').fill('观察日常的光');await page.locator('#axis-save').click();await page.locator('#axis-dialog').waitFor({state:'hidden'});
   await page.evaluate(async()=>{
     const axis=axes[0];
     await api('/api/tasks','POST',{category:'作业',title:'摄影阅读',due_at:'2026-10-09T12:00:00Z',axis_id:axis.id,todos:[{id:'a',text:'阅读一章',done:false},{id:'b',text:'记下疑问',done:false},{id:'c',text:'整理笔记',done:false}]});
@@ -68,11 +68,15 @@ try {
     await api('/api/tasks','POST',{category:'记录',title:'雨后校园',starts_at:'2026-10-07T12:00:00Z',content:'抬头看到晚霞',axis_id:next.id});await refresh();
   });
   assert.equal(await page.locator('.axis-head').count(),2);
+  const head=page.locator('.axis-head').first();assert.equal(await head.locator('text').textContent(),'学会摄影：从观察光线到完成自己的第一本摄影集');
+  assert.ok(await head.evaluate(node=>Number(node.querySelector('rect').getAttribute('width'))>=node.querySelector('text').getComputedTextLength()+23));
+  async function nodeLabels(){for(const node of await page.locator('.axis-card').all()){const dot=await node.locator('circle').last().boundingBox(),title=await node.locator('.axis-node-title').boundingBox(),date=await node.locator('.axis-node-date').boundingBox();assert.ok(Math.abs(dot.x+dot.width/2-title.x-title.width/2)<1);assert.ok(Math.abs(dot.x+dot.width/2-date.x-date.width/2)<1);assert.ok(date.y+date.height<dot.y && title.y>dot.y+dot.height);}}
+  await nodeLabels();
   const circle=page.locator('.axis-card circle').first(),box=await circle.boundingBox();
   const neighbor=await page.locator('.axis-line').nth(1).locator('.axis-head').getAttribute('transform');
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2,box.y+box.height/2+250,{steps:12});await page.mouse.up();
   assert.notEqual(await page.locator('.axis-line').nth(1).locator('.axis-card').getAttribute('transform'),'translate(220,220)');
-  assert.equal(await page.locator('#task-dialog').isVisible(),false,'node drag does not open editor');
+  assert.equal(await page.locator('#task-dialog').isVisible(),false,'node drag does not open editor');await nodeLabels();
   const scale=await page.evaluate(()=>axisScene.camera.z);await page.getByRole('button',{name:'放大画布',exact:true}).click();assert.ok(await page.evaluate(()=>axisScene.camera.z)>scale);
   await page.getByRole('button',{name:'复位画布',exact:true}).click();assert.equal(await page.evaluate(()=>axisScene.camera.z),1);
   for(const selector of ['.axis-head','.axis-tail']){
@@ -90,6 +94,7 @@ try {
   assert.equal(await page.locator('#done-field').isVisible(),true);assert.equal(await page.locator('#range-fields').isVisible(),false);
   await page.locator('#task-title').fill('第一张照片');await page.locator('#record-time').fill('2026-10-06T20:00');await page.locator('#task-content').fill('看见树叶上的纹理');
   await page.locator('#save-task').click();await page.locator('#task-dialog').waitFor({state:'hidden'});
+  await page.waitForFunction(()=>axisItems.some(t=>t.title==='第一张照片'));
   assert.equal(await page.evaluate(()=>axisItems.filter(t=>t.axis_id===axes[0].id).sort(chronological)[0].title),'第一张照片');
   await page.locator('.axis-head').first().click();assert.equal(await page.locator('.axis-member').count(),3);
   await page.locator('.axis-member').first().getByRole('button',{name:'离轴'}).click();await page.waitForFunction(()=>document.querySelectorAll('.axis-member').length===2);

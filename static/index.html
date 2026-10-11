@@ -3,43 +3,81 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#101225"><meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="description" content="记录与规划。">
+  <meta name="description" content="记下要做的事，安排轻重缓急，再留一段时间专心完成。">
   <title>RUCapture</title>
   <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script><script src="/static/axis-layout.js" defer></script><script src="/static/capture.js" defer></script><script src="/static/messages.js" defer></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/effects.css"><script src="/static/app.js" defer></script><script src="/static/axis-layout.js" defer></script><script src="/static/capture.js" defer></script><script src="/static/messages.js" defer></script><script src="/static/planning.js" defer></script>
 </head>
 <body>
-<section id="login" class="login" hidden>
-  <header class="landing-header"><a href="/" class="landing-brand"><img src="/static/icon.svg" width="36" height="36" alt=""><span class="wordmark"><b>RU</b>Capture</span></a><span class="landing-edition">开放体验 · v3.1.5</span></header>
-  <div class="landing-grid"><div class="landing-story">
-    <p class="landing-kicker"><span></span> 记录与规划，在同一个空间</p>
-    <h1>留住此刻。<br><em>向下一步出发。</em></h1>
-    <p class="landing-intro">安排待办，写下日常。用轴线把一路的行动与感受连起来。</p>
-    <div class="landing-art" aria-label="日历、记录与轴线的功能示意">
-      <div class="art-glow"></div>
-      <svg viewBox="0 0 620 270" aria-hidden="true"><defs><linearGradient id="landing-line"><stop stop-color="#aa9aff"/><stop offset="1" stop-color="#77d7ce"/></linearGradient></defs><path class="art-path" d="M25 170C150 170 120 80 240 100S405 210 575 80"/><path class="art-path second" d="M25 225C165 225 195 167 308 180S425 260 575 205"/><circle cx="65" cy="166.215" r="7"/><circle cx="240" cy="100.000" r="8"/><circle cx="403" cy="148.256" r="7"/><circle cx="575" cy="80.000" r="10"/><circle cx="125" cy="213.204" r="7"/><circle cx="308" cy="180.000" r="7"/><circle cx="500" cy="224.830" r="7"/></svg>
-      <div class="art-card art-plan"><span>日历规划</span><strong>为重要的事，留出时间。</strong><div class="art-week"><i>一</i><i>二</i><i class="selected">三</i><i>四</i><i>五</i><i>六</i><i>日</i></div></div>
-      <div class="art-card art-note"><span>今日记录</span><strong>一个想法，一点进步。</strong><div class="art-note-lines"><i></i><i></i></div></div>
-      <span class="art-chip">一条轴线 · 一段过程</span>
-    </div>
-    <div class="landing-stats"><div><strong id="public-user-count">—</strong><span>已注册用户</span></div><div><strong>300</strong><span>本阶段名额</span></div><div><strong>免费</strong><span>开放体验</span></div></div>
-  </div>
-  <form id="login-form" class="login-card">
-    <div class="login-card-heading"><h2 id="auth-heading">欢迎回来</h2><p>登录你的记录与规划空间</p></div>
+<section id="login" class="login launch" hidden aria-label="RUCapture 产品介绍与登录">
+  <header class="landing-header">
+    <a href="/" class="landing-brand"><img src="/static/icon.svg" width="36" height="36" alt=""><span class="wordmark"><b>RU</b>Capture</span></a>
+    <nav class="launch-nav" aria-label="产品介绍"><button type="button" data-launch-to="0" aria-current="step"><span>01</span> 汇总作业</button><button type="button" data-launch-to="1"><span>02</span> 校园日历</button><button type="button" data-launch-to="2"><span>03</span> 目标轴线</button><button type="button" data-launch-to="3"><span>04</span> 规划专注</button></nav>
+    <a class="launch-contact" href="https://xhslink.cn/o/5JLJ8hb11TH" target="_blank" rel="noopener noreferrer">联系我们</a>
+    <button type="button" class="launch-signin" data-launch-login aria-controls="login-form">立即体验 <span aria-hidden="true">↗</span></button>
+  </header>
+  <div class="launch-stage"><div class="launch-track">
+  <section class="launch-page launch-first is-current" id="launch-collect" aria-labelledby="launch-title-1" data-launch-page="0">
+    <div class="launch-atmosphere" aria-hidden="true"><div class="atmosphere-glow"></div><svg class="atmosphere-ribbon" viewBox="0 0 900 600" preserveAspectRatio="none"><path d="M120-60C620 20 110 290 700 355S940 600 1000 670"/><path d="M150-60C655 12 137 304 718 372S958 600 1030 680"/><path d="M210-60C710 0 197 330 754 410S985 600 1080 720"/></svg><div class="atmosphere-haze"></div><div class="atmosphere-aurora"><i></i><i></i><i></i></div></div>
+    <div class="launch-layout">
+      <div class="launch-copy">
+        <p class="launch-eyebrow"><span>01 / 收拢待办</span></p>
+        <h1 id="launch-title-1">把各处的作业，<br><em>放在一张看板。</em></h1>
+        <p class="launch-answer">授权支持的网站，作业就会定时汇总。<br>合上电脑，也能更新。</p>
+      </div>
+        <div class="collect-demo launch-demo" aria-label="分散作业汇总的交互示意">
+          <div class="collect-sky">
+            <svg class="cloud-routes" viewBox="0 0 720 250" preserveAspectRatio="none" aria-hidden="true"><g class="cloud-route-lines"><path d="M95 47 C160 47 170 128 292 128"/><path d="M620 55 C542 55 535 123 430 123"/><path d="M95 187 C190 220 193 141 300 141"/><path d="M360 167 C360 230 440 198 500 249"/></g><g class="cloud-route-sparks"><path d="M95 47 C160 47 170 128 292 128"/><path d="M620 55 C542 55 535 123 430 123"/><path d="M95 187 C190 220 193 141 300 141"/><path d="M360 167 C360 230 440 198 500 249"/></g></svg>
+            <div class="collect-origins"><span><i>作</i> 作业网站</span><span><i>课</i> 在线课堂</span><span><i>学</i> 课程平台</span></div>
+            <div class="cloud-core"><div class="cloud-aura" aria-hidden="true"></div><svg viewBox="0 0 320 190" aria-hidden="true"><defs><linearGradient id="cloud-surface" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b7b4ff" stop-opacity=".5"/><stop offset=".55" stop-color="#777ac5" stop-opacity=".2"/><stop offset="1" stop-color="#6ce8ff" stop-opacity=".25"/></linearGradient><linearGradient id="cloud-rim" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f5eaff"/><stop offset=".5" stop-color="#c4b0ff"/><stop offset="1" stop-color="#8beaff"/></linearGradient></defs><path class="cloud-shadow" d="M80 155C27 155 25 87 72 80C69 25 151 11 174 58C214 26 264 56 258 95C304 106 290 155 251 155Z"/><path class="cloud-body" d="M80 155C27 155 25 87 72 80C69 25 151 11 174 58C214 26 264 56 258 95C304 106 290 155 251 155Z"/><path class="cloud-sheen" d="M80 78C80 35 143 26 168 64M191 67C216 48 244 66 244 87"/><path class="cloud-sync" d="M143 95a24 24 0 0 1 40 12l-1-14m1 14-14-1m7 20a24 24 0 0 1-40-12l1 14m-1-14 14 1"/></svg><strong>云端爬取</strong></div>
+          </div>
+          <div class="collect-board"><div class="demo-toolbar"><span><i class="demo-live-dot"></i> 我的作业</span><button type="button" id="collect-demo-replay">演示汇总 <span aria-hidden="true">↻</span></button></div>
+            <div class="collect-item"><span class="demo-type purple">作业</span><strong>线性表的应用</strong><span>今天 22:00</span><b aria-hidden="true">↗</b></div>
+            <div class="collect-item"><span class="demo-type purple">作业</span><strong>概率论 · 第一次练习</strong><span>周五 18:00</span><b aria-hidden="true">↗</b></div>
+            <div class="collect-item"><span class="demo-type purple">作业</span><strong>读书报告</strong><span>下周一</span><b aria-hidden="true">↗</b></div>
+          </div>
+        </div>
+      <div class="launch-auth">  <form id="login-form" class="login-card">
+    <div class="login-card-heading"><h2 id="auth-heading">欢迎回来</h2></div>
     <div id="trial-auth" hidden><p id="trial-notice" class="error" hidden></p><div class="auth-tabs"><button id="auth-login" type="button" class="secondary">登录</button><button id="auth-register" type="button" class="text-button">注册</button></div><label for="username">用户名</label><input id="username" autocomplete="username" minlength="3" maxlength="24" placeholder="3–24 位字母、数字或下划线"><div id="invite-field" hidden><label for="invite-code">邀请码</label><input id="invite-code" autocomplete="off" spellcheck="false"></div><div id="recovery-field" hidden><label for="recovery-code">账号恢复码</label><input id="recovery-code" autocomplete="off" spellcheck="false"></div></div>
     <label id="password-label" for="password">访问密码</label><input id="password" type="password" autocomplete="current-password" required>
 
     <label class="remember-control"><input id="remember-login" type="checkbox">自动登录 <small>30 天内保持登录</small></label>
     <p id="login-error" class="error" role="alert"></p><button type="submit" class="primary">进入看板 <span aria-hidden="true">→</span></button>
     <button id="auth-recover" type="button" class="text-button" hidden>忘记密码？使用恢复码</button>
-  </form></div>
-  <div class="landing-features"><div><b>▦</b><strong>日历规划</strong><span>作业、考试与日常安排</span></div><div><b>✎</b><strong>随时记录</strong><span>想法、感受与生活片段</span></div><div><b>⌁</b><strong>轴线串联</strong><span>把卡片放回自己的过程</span></div><div><b>↻</b><strong>跨端同步</strong><span>电脑与手机，同一个空间</span></div></div>
+  </form><div class="landing-stats"><div><strong id="public-user-count">—</strong><span>位同学已加入</span></div></div></div>
+    </div>
+    <button type="button" class="launch-next" data-launch-to="1">明天的课和考试，也能一起安排吗？ <span aria-hidden="true">↓</span></button>
+  </section>
+  <section class="launch-page" id="launch-calendar" aria-labelledby="launch-title-2" data-launch-page="1">
+    <div class="launch-atmosphere" aria-hidden="true"><div class="atmosphere-glow"></div><div class="atmosphere-grid"></div><div class="atmosphere-tile tile-one"></div><div class="atmosphere-tile tile-two"></div><div class="atmosphere-tile tile-three"></div><div class="atmosphere-glass"><i></i><i></i><i></i></div></div>
+    <div class="launch-layout">
+      <div class="launch-copy"><p class="launch-eyebrow"><span>02 / 校园日历</span></p><h2 id="launch-title-2">课表、考试和日常，<br><em>都在你的日历里。</em></h2><p class="launch-answer">早八的课、周三的小测、晚上的社团排练，还有睡前想记下的几句话。导入课表和考试，添上自己的安排，在同一张日历里，给校园生活留好位置。</p></div>
+      <div class="calendar-demo launch-demo" aria-label="校园日历交互示意"><div class="demo-toolbar"><strong>2026 年 10 月</strong><span>我的一周</span></div><div class="demo-week" role="group" aria-label="选择示例日期"><button type="button" data-demo-day="0" aria-pressed="true"><small>周一</small><b>12</b><i></i></button><button type="button" data-demo-day="1" aria-pressed="false"><small>周二</small><b>13</b><i></i></button><button type="button" data-demo-day="2" aria-pressed="false"><small>周三</small><b>14</b><i></i></button><span><small>周四</small><b>15</b></span><span><small>周五</small><b>16</b></span><span><small>周六</small><b>17</b></span><span><small>周日</small><b>18</b></span></div><div id="launch-day-events" class="demo-agenda" aria-live="polite"></div></div>
+    </div><button type="button" class="launch-next" data-launch-to="2">做完一件件小事，怎样看见自己走了多远？ <span aria-hidden="true">↓</span></button>
+  </section>
+  <section class="launch-page" id="launch-journey" aria-labelledby="launch-title-3" data-launch-page="2">
+    <div class="launch-atmosphere" aria-hidden="true"><div class="atmosphere-glow"></div><div class="atmosphere-dust"></div><div class="atmosphere-comet"><i></i><i></i><i></i></div><svg class="atmosphere-route" viewBox="0 0 1100 620" preserveAspectRatio="none"><path d="M-90 150C165 150 50-40 360 40S850 300 1140 60"/><path d="M460 680C710 600 670 370 990 460S1130 410 1210 360"/><circle cx="360" cy="40" r="3"/><circle cx="990" cy="460" r="3"/></svg></div>
+    <div class="launch-layout"><div class="launch-copy"><p class="launch-eyebrow"><span>03 / 目标轴线</span></p><h2 id="launch-title-3">一张张卡片，<br><em>连成你走过的路。</em></h2><p class="launch-answer">一条轴线，可以是“这门课拿到 4.0”，也可以是一段旅行。把任务和记录关联进去，留下尝试、进步和那些值得回看的瞬间。</p><div class="journey-choices" role="group" aria-label="选择轴线示例"><button type="button" data-demo-journey="0" aria-pressed="true">课程目标</button><button type="button" data-demo-journey="1" aria-pressed="false">运动习惯</button><button type="button" data-demo-journey="2" aria-pressed="false">旅行随记</button></div></div>
+      <div class="journey-demo launch-demo" aria-label="任务与记录串联为轴线的交互示意"><div class="demo-toolbar"><span>我的轴线</span></div><div class="journey-plot"><svg viewBox="0 0 600 220" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="journey-gradient"><stop stop-color="#bca4ff"/><stop offset="1" stop-color="#a8dfff"/></linearGradient></defs><path pathLength="1" d="M55 160 C120 160 130 86 210 86 S320 165 380 118 S480 32 545 45"/></svg><div class="journey-head" id="launch-journey-title">这门课，争取 4.0</div><div class="journey-node jn-one"><small>第 1 周</small><i></i><strong>课前预习</strong><span>作业</span></div><div class="journey-node jn-two"><small>第 3 周</small><i></i><strong>第一次小测</strong><span>考试</span></div><div class="journey-node jn-three"><small>第 5 周</small><i></i><strong>找到适合自己的方法</strong><span>记录</span></div></div><div id="launch-journey-reflection" class="journey-reflection"><span>回看这条路</span><p>从“还没弄懂”，到能独立讲清一道题。</p></div></div>
+    </div><button type="button" class="launch-next" data-launch-to="3">方向有了，今天该先做什么？ <span aria-hidden="true">↓</span></button>
+  </section>
+  <section class="launch-page" id="launch-focus" aria-labelledby="launch-title-4" data-launch-page="3">
+    <div class="launch-atmosphere" aria-hidden="true"><div class="atmosphere-glow"></div><div class="atmosphere-pulse"><i></i><i></i><i></i></div><div class="atmosphere-dial"></div><div class="atmosphere-eclipse"></div></div>
+    <div class="launch-layout"><div class="launch-copy"><p class="launch-eyebrow"><span>04 / 规划与专注</span></p><h2 id="launch-title-4">排好先后，<br><em>再专心做一件。</em></h2><p class="launch-answer">明天的小测要复习，想读的书也不该一直搁着。用象限排好先后，再给眼前这件事留一段专注时间。结束时，记下读懂了什么、卡在了哪里，下一次就有了起点。</p></div>
+      <div class="planning-demo launch-demo" aria-label="象限安排与专注的交互示意"><div class="demo-toolbar"><span>安排轻重缓急</span><span>重要性 ↑ / 紧急性 →</span></div><div class="demo-quadrants"><span class="demo-axis-x"></span><span class="demo-axis-y"></span><div class="demo-plan-card plan-later"><span>记录 · 不紧急且重要</span><strong>整理这一周的想法</strong><small>周末，留一点时间</small></div><div class="demo-plan-card plan-now"><span>考试 · 紧急且重要</span><strong>把薄弱章节再过一遍</strong><small>今天 19:00</small></div><span class="demo-quadrant-label">先做眼前这一件</span></div><div class="launch-focus-clock"><div><span>专注模式</span><strong id="launch-clock-value">00:25:00</strong><small id="launch-clock-note">目标：把薄弱章节再过一遍</small></div><button type="button" id="launch-clock-toggle" aria-pressed="false">试试专注 <span aria-hidden="true">▷</span></button></div></div>
+    </div><footer class="launch-footer"><button type="button" data-launch-to="0">回到第一页 ↑</button></footer>
+  </section>
+  </div></div>
+  <nav class="launch-pager" aria-label="切换介绍页"><span id="launch-page-number" aria-hidden="true">01 / 04</span><button type="button" data-launch-to="0" aria-label="第 1 页：汇总作业" aria-current="step"></button><button type="button" data-launch-to="1" aria-label="第 2 页：校园日历"></button><button type="button" data-launch-to="2" aria-label="第 3 页：目标轴线"></button><button type="button" data-launch-to="3" aria-label="第 4 页：规划专注"></button></nav>
 </section>
 <div id="workspace" class="workspace" hidden>
   <aside class="sidebar">
     <div class="brand-row"><a class="brand" href="/" aria-label="RUCapture首页"><span class="brand-icon" aria-hidden="true"><img src="/static/icon.svg" alt="" width="56" height="56"></span><span class="brand-copy"><span class="wordmark"><b>RU</b>Capture</span><small id="app-version">v3.1.5</small></span></a><button id="sidebar-toggle" class="sidebar-toggle" aria-label="收起侧栏" aria-expanded="true" title="收起侧栏"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4"/><path class="sidebar-divider" d="M12 4v16"/></svg></button></div>
     <nav id="categories" aria-label="校园板块"></nav>
     <div class="sidebar-bottom">
+      <button id="focus-button" class="nav-button" aria-label="专注模式"><span>专注模式</span><span id="focus-countdown"></span></button>
       <button id="demo-button" class="nav-button" aria-label="使用演示"><span>使用演示</span></button>
       <button id="sources-button" class="nav-button"><span>来源与同步</span></button>
       <button id="user-menu-toggle" class="user-card" popovertarget="user-menu" aria-expanded="false" aria-controls="user-menu" aria-label="打开账户菜单">
@@ -48,15 +86,23 @@
     </div>
   </aside>
   <main>
-    <section class="heading"><div><h1 id="view-title">总览</h1></div><div class="add-control"><button id="add-task" class="primary" aria-expanded="false"><span aria-hidden="true">＋</span> 添加卡片</button><div id="add-menu" class="add-menu" hidden aria-label="选择任务板块"></div></div></section>
-    <section class="summary" aria-label="任务概况"><div><span>待完成</span><strong id="count-open">0</strong><small></small><span class="stat-art" aria-hidden="true">◌</span></div><div><span>未来 7 天到期</span><strong id="count-soon">0</strong><small></small><span class="stat-art" aria-hidden="true">↗</span></div><div><span>已逾期</span><strong id="count-overdue">0</strong><small></small><span class="stat-art" aria-hidden="true">⌁</span></div><div><span>已完成</span><strong id="count-done">0</strong><small></small><span class="stat-art" aria-hidden="true">✓</span></div></section>
-    <div id="overview-views" class="overview-views" role="group" aria-label="总览视图"><button data-view="calendar" aria-pressed="true">▦ 日历</button><button data-view="axes" aria-pressed="false">⌁ 轴线</button></div>
+    <div class="workspace-atmosphere" aria-hidden="true"></div>
+    <section class="heading"><div class="workspace-scene" aria-hidden="true"><svg viewBox="0 0 700 190" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="workspace-flow" x1="0" y1="0" x2="1" y2="1"><stop stop-color="currentColor" stop-opacity="0"/><stop offset=".45" stop-color="currentColor"/><stop offset=".65" stop-color="#ddf4ff"/><stop offset="1" stop-color="currentColor" stop-opacity=".1"/></linearGradient></defs><g class="workspace-stream"><path d="M-30 220C190 220 160-55 425 18S540 225 750 115"/><path d="M-30 208C190 208 164-70 432 6S548 212 750 103"/><path d="M-30 195C190 195 168-85 439-6S556 199 750 91"/><path d="M-30 183C190 183 172-100 446-18S564 186 750 79"/></g><g class="workspace-motif motif-homework"><g class="motif-float"><path class="motif-surface" d="m333-35 237 49-47 155-237-49Z"/><path class="motif-surface" d="m291-5 237 49-47 155-237-49Z"/><path class="motif-surface motif-front" d="m247 30 237 49-47 155-237-49Z"/><path class="motif-edge" d="m247 30 237 49-10 34"/><path class="motif-detail" d="m280 78 127 26m-137 2 94 19m-104 9 118 24"/><path class="motif-detail" d="m477 22 139 28-24 79"/></g></g>
+<g class="workspace-motif motif-exam"><circle class="motif-halo" cx="410" cy="100" r="127"/><circle class="motif-detail" cx="410" cy="100" r="102"/><path class="motif-edge" d="M283 100a127 127 0 0 1 162-122"/><g class="exam-ticks"><path d="M298 100h12m5-45 11 5m23-43 7 10m54-45v16m55 3-6 10m40 23-10 7m33 54h-12m-4 56-11-6m-25 38-7-11m-54 35v-12m-55-4 6-10m-39-24 10-7"/></g><path class="motif-edge" d="m410 100 65-45m-65 45-28-38"/><circle class="motif-point" cx="410" cy="100" r="4"/><path class="motif-detail" d="M205 164h335m-315-5v10m26-10v10m26-10v10m26-10v10m26-10v10m26-10v10m26-10v10m26-10v10m26-10v10m26-10v10m26-10v10m26-10v10"/></g>
+<g class="workspace-motif motif-activity"><g class="motif-flow"><path class="motif-wash" d="M110 200C190 183 264-90 356-9S432 253 525 163 568-33 716-26"/><path class="motif-edge" d="M110 186C190 169 264-104 356-23S432 239 525 149 568-47 716-40"/><path class="motif-detail" d="M110 222C190 205 264-68 356 13S432 275 525 185 568-11 716-4"/><path class="motif-detail" d="M150 230C270 159 331-31 412 26S532 224 694 56"/></g></g>
+<g class="workspace-motif motif-meeting"><path class="motif-link" d="m201 119 89-83 114 79 109-94 98 104M290 36l-17 141 131-62 129 81-20-175M201 119l72 58m131-62 3-134m126 215 78-71"/><path class="motif-edge" d="m201 119 89-83 114 79 109-94"/><circle class="motif-surface" cx="290" cy="36" r="18"/><circle class="motif-surface" cx="404" cy="115" r="27"/><circle class="motif-surface" cx="513" cy="21" r="15"/><circle class="motif-detail" cx="404" cy="115" r="39"/><g class="meeting-points"><circle cx="201" cy="119" r="4"/><circle cx="290" cy="36" r="5"/><circle cx="404" cy="115" r="5"/><circle cx="513" cy="21" r="4"/><circle cx="611" cy="125" r="3"/><circle cx="273" cy="177" r="3"/><circle cx="533" cy="196" r="3"/></g></g>
+<g class="workspace-motif motif-record"><g class="motif-float"><path class="motif-surface" d="M269-16Q365-34 525 25L496 210Q351 150 243 175Z"/><path class="motif-surface motif-front" d="M249 3Q358-9 500 45L472 224Q322 165 220 195Z"/><path class="motif-edge" d="M249 3Q358-9 500 45L488 116"/><path class="motif-detail" d="M281 46q79 1 157 29m-163-5q78 1 153 29m-158-5q73 1 148 29m-154-5q61 1 104 20"/><path class="record-ink" d="M171 159c71-101 147-57 121-29s-49 19-17-5 80-9 59 9 77-20 106 4"/></g></g>
+<g class="workspace-motif motif-course"><path class="motif-detail" d="M210 12h349v180H210zM210 57h349M210 102h349M210 147h349M280 12v180M350 12v180M420 12v180M490 12v180"/><rect class="motif-surface motif-front" x="282" y="14" width="66" height="87" rx="7"/><rect class="motif-surface" x="352" y="104" width="135" height="41" rx="7"/><rect class="motif-surface" x="422" y="59" width="65" height="41" rx="7"/><path class="motif-edge" d="M283 99V22q0-7 7-7h50"/></g></svg></div><div><h1 id="view-title">总览</h1></div><div class="add-control"><button id="add-task" class="primary" aria-expanded="false"><span aria-hidden="true">＋</span> 添加卡片</button><div id="add-menu" class="add-menu" hidden aria-label="选择任务板块"></div></div></section>
+    <section class="summary" aria-label="任务概况"><div><span>待完成</span><strong id="count-open">0</strong><small></small><span class="stat-art" aria-hidden="true"><svg viewBox="0 0 150 120"><g class="stat-sheets"><path class="sheet-back" d="m57 15 66 19-17 57-66-19Z"/><path class="sheet-middle" d="m43 29 66 19-17 57-66-19Z"/><path class="sheet-front" d="m30 44 66 19-17 57-66-19Z"/><path class="stat-glint" d="m30 44 66 19-6 20"/><path class="stat-detail" d="m40 68 30 9m-34 4 20 6"/></g></svg></span><span class="stat-art record-stat" aria-hidden="true"><svg viewBox="0 0 150 120"><path d="M51 25h55v75H51zM45 31v75h55M62 44h31M62 57h25M62 70h31M62 84h17"/><path d="M87 25v19l7-5 7 5V25"/></svg></span></div><div><span>未来 7 天到期</span><strong id="count-soon">0</strong><small></small><span class="stat-art" aria-hidden="true"><svg viewBox="0 0 170 120"><path class="stat-trail trail-far" d="M-10 117C53 113 77 78 97 26S138-6 185 5"/><path class="stat-trail trail-near" d="M-10 129C59 124 89 85 110 33S147-2 187 18"/><path class="stat-trail trail-main" d="M-10 140C66 133 99 91 124 40S157 7 190 30"/><path class="stat-glint" d="M86 109c17-14 29-35 38-55"/><circle class="stat-spark" cx="107" cy="82" r="3"/></svg></span><span class="stat-art record-stat" aria-hidden="true"><svg viewBox="0 0 150 120"><path d="M31 95h104M35 77V59m15 18V49m15 28V65m15 12V37m15 40V48m15 29V27m15 50V43"/><path d="m35 46 15-10 15 16 15-28 15 11 15-21 15 15"/></svg></span></div><div><span>已逾期</span><strong id="count-overdue">0</strong><small></small><span class="stat-art" aria-hidden="true"><svg viewBox="0 0 160 120"><path class="stat-pulse-shadow" d="m4 84 39-7 17-36 15 57 20-39 15 12 46-8"/><path class="stat-pulse" d="m4 84 39-7 17-36 15 57 20-39 15 12 46-8"/><path class="stat-detail" d="m18 101 27-5m66-10 37-6"/><circle class="stat-spark" cx="60" cy="41" r="2.5"/></svg></span><span class="stat-art record-stat" aria-hidden="true"><svg viewBox="0 0 150 120"><circle cx="85" cy="55" r="25"/><path d="M85 15v7m0 66v7M45 55h7m66 0h7M57 27l5 5m46 46 5 5m-56 0 5-5m46-46 5-5M62 106h47"/></svg></span></div><div><span>已完成</span><strong id="count-done">0</strong><small></small><span class="stat-art" aria-hidden="true"><svg viewBox="0 0 160 120"><g class="stat-ripples"><ellipse cx="96" cy="70" rx="70" ry="24" transform="rotate(-27 96 70)"/><ellipse cx="96" cy="70" rx="50" ry="17" transform="rotate(-27 96 70)"/><path class="stat-glint" d="M35 103c24 5 81-16 116-53"/><path class="stat-check" d="m74 56 13 11 25-35"/></g></svg></span><span class="stat-art record-stat" aria-hidden="true"><svg viewBox="0 0 150 120"><path d="m46 83 9-26 51-39 16 20-51 39-25 6Zm9-26 16 20m24-50 16 20M44 105c20-14 23 13 45-2s29-4 38-9"/></svg></span></div></section>
+    <div id="overview-views" class="overview-views" role="group" aria-label="总览视图"><button data-view="calendar" aria-pressed="true">▦ 日历</button><button data-view="axes" aria-pressed="false">⌁ 轴线</button><button data-view="quadrants" aria-pressed="false">⊞ 象限</button></div>
     <div id="board" class="board" aria-live="polite"></div>
     <p id="load-error" class="error" role="alert"></p>
   </main>
 </div>
 <nav id="user-menu" class="user-menu" popover aria-label="账户菜单">
   <div class="user-menu-heading"><strong id="user-menu-name">我的账户</strong><small id="user-menu-role">个人空间</small></div>
+  <button id="effects-toggle" class="user-menu-item effects-toggle" type="button" role="switch" aria-checked="true" aria-label="炫酷设计"><span>炫酷设计</span><span class="effects-status">开</span><span class="effects-lever" aria-hidden="true"><i></i></span></button>
+  <button id="daily-summary-button" class="user-menu-item" type="button"><span>今日总结</span></button>
   <button id="messages-button" class="user-menu-item"><span>消息看板</span></button>
   <button id="feedback-button" class="user-menu-item" hidden><span>与管理员反馈</span><small id="feedback-unread" hidden></small></button>
   <button id="archive-button" class="user-menu-item" aria-label="归档处"><span>归档处</span></button>
@@ -65,13 +111,16 @@
 </nav>
 <dialog id="task-dialog">
   <form id="task-form">
-    <div class="dialog-heading"><div><h2 id="dialog-title">添加任务</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div>
+    <div class="dialog-heading"><div><h2 id="dialog-title">添加任务</h2><p id="focus-intro" class="hint" hidden>下方记录专注信息，结束或完成专注后可选择是否将本次专注保存。</p></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div>
+    <div id="focus-settings" hidden><div class="focus-clock-panel"><div id="focus-duration" class="focus-clock" role="group" aria-label="专注时长"></div><div class="focus-clock-controls"><button id="focus-reset" type="button" class="secondary">复位</button><button id="focus-end" type="button" class="secondary" disabled>结束</button><button id="focus-toggle" type="button" class="primary">开始专注</button></div></div></div>
     <label for="task-title">标题 <span class="required">必填</span></label><input id="task-title" maxlength="4000" placeholder="为这件事起个名字" required>
+    <section id="focus-targets" hidden><p class="focus-target-label">目标卡片<span class="optional">（选填，可多选）</span></p><div id="focus-tasks" class="compact-task-list"></div></section>
     <div id="deadline-field"><label for="due-at">截止时间 <span class="required">必填</span></label><input id="due-at" type="datetime-local"></div>
     <div id="range-fields" class="date-range" hidden><div><label for="starts-at">开始时间 <span class="required">必填</span></label><input id="starts-at" type="datetime-local"></div><div><label for="ends-at">结束时间 <span class="required">必填</span></label><input id="ends-at" type="datetime-local"></div></div>
     <div id="record-time-field" hidden><label for="record-time">时间 <span class="required">必填</span></label><input id="record-time" type="datetime-local"></div><p class="hint">北京时间</p>
-    <label for="task-location">地点 <span class="optional">选填</span></label><input id="task-location" maxlength="300" placeholder="例如：明德楼 302 / 图书馆 / 线上">
+    <div id="task-location-field"><label for="task-location">地点 <span class="optional">选填</span></label><input id="task-location" maxlength="300" placeholder="例如：明德楼 302 / 图书馆 / 线上"></div>
     <label for="task-content">内容 <span class="optional">选填</span></label><textarea id="task-content" maxlength="10000" rows="4" placeholder="记录备忘、相关安排或补充说明"></textarea>
+    <div id="focus-info-actions" hidden><button id="focus-edit-info" type="button" class="secondary">编辑信息</button><button id="focus-cancel-info" type="button" class="secondary" hidden>取消</button><button id="focus-save-info" type="button" class="primary" hidden>保存</button></div>
     <label for="task-axis">所属轴线 <span class="optional">选填</span></label><select id="task-axis"><option value="">（无）</option></select>
     <div id="schedule-fields" hidden><label for="schedule-person" id="schedule-person-label">教师 <span class="optional">选填</span></label><input id="schedule-person" maxlength="300" placeholder="选填"><label for="schedule-seat">座位号 <span class="optional">选填</span></label><input id="schedule-seat" maxlength="300"></div><div class="field-heading"><span>待办事项 <span class="optional">选填</span></span><span class="hint">拖动 ⋮⋮ 排序</span></div>
     <div id="task-todos"></div>
@@ -83,8 +132,9 @@
     <p id="task-completed" class="hint" hidden></p><div id="homework-status"><label for="status">进度</label><select id="status"><option value="todo">待开始</option><option value="doing">进行中</option><option value="done">已完成</option></select></div>
     <label id="done-field" class="completion-control" hidden><input id="task-done" type="checkbox"><span id="done-label">已完成</span></label>
     <p id="task-error" class="error" role="alert"></p>
-    <div class="dialog-actions"><button type="button" class="secondary close-dialog">取消</button><button id="save-task" class="primary" type="submit">保存卡片</button></div>
+    <div class="dialog-actions"><button id="editor-delete" type="button" class="text-button editor-delete" hidden>删除卡片</button><button type="button" class="secondary close-dialog">取消</button><button id="save-task" class="primary" type="submit">保存卡片</button></div>
   </form>
+  <section id="focus-history" hidden aria-label="往期专注"><h3>往期专注</h3><p class="hint">结束后保留 7 天，随后自动删除。导出的记录独立保留。</p><div id="focus-history-list"></div><p id="focus-error" class="error" role="alert"></p></section>
 </dialog>
 <dialog id="axis-dialog">
   <form id="axis-form"><div class="dialog-heading"><h2 id="axis-dialog-title">添加轴线</h2><button type="button" class="icon-button close-dialog" aria-label="关闭轴线">×</button></div>
@@ -114,20 +164,27 @@
   </ol>
   <section id="guide-install" class="guide-step" aria-labelledby="sync-tab-1" data-step="1">
     <h3>安装或更新扩展</h3><div id="collector-install" class="step-body"><p id="install-state" class="hint" role="status">仅需在电脑上安装一次</p>
-    <a class="secondary extension-download" href="/extension.zip?v=1.9.3" download="RUCapture-extension.zip">下载扩展 v1.9.3</a>
+    <a class="secondary extension-download" href="/extension.zip?v=1.9.5" download="RUCapture-extension.zip">下载扩展 v1.9.5</a>
     <h4>首次安装</h4><ol><li>下载并解压，找到 <strong>extension</strong> 文件夹。</li><li>打开浏览器的“扩展程序 → 管理扩展”。<button id="copy-extension-page" class="text-button" type="button">复制管理页地址</button></li><li>开启“开发人员模式”，选择“加载解压缩的扩展”，选中该文件夹。</li></ol>
     <details class="extension-update"><summary>已安装：如何更新？</summary><ol><li>将新版 extension 内的文件替换到原安装文件夹。</li><li>在管理扩展页面点击“重新加载”，再刷新本网页。</li></ol><p class="hint">无需卸载；已有卡片会保留。</p><button id="collector-options" class="text-button" type="button" disabled>打开扩展设置</button></details>
     <button id="collector-recheck" class="primary" type="button">我已安装，重新检测</button><button id="sync-existing" class="text-button" type="button" hidden>查看已配置网站的同步</button></div>
   </section>
   <section id="account-setup" class="guide-step" aria-labelledby="sync-tab-2" data-step="2" hidden><h3>连接当前账号</h3><div class="step-body"><p id="collector-state" role="status">正在检查扩展…</p><div id="collector-controls" hidden><button id="collector-connect" class="primary">连接此看板</button></div><div id="browser-settings" hidden><label class="collector-toggle"><input id="collector-enabled" type="checkbox">浏览器运行时，每 15 分钟同步</label></div></div></section>
-  <section id="website-setup" class="guide-step" aria-labelledby="sync-tab-3" data-step="3" hidden><h3>添加网站</h3><div class="step-body"><p class="hint">登录网站，打开要同步的列表，将网址添加到这里。</p><div id="website-list"></div><form id="source-links-form" hidden><label for="source-url">网站页面链接</label><div class="website-input"><input id="source-url" type="url" required placeholder="https://…" spellcheck="false" autocomplete="off"><button class="secondary" id="save-source-link" type="submit">确认</button><button class="text-button" id="cancel-source-link" type="button">取消</button></div></form><button id="add-source-link" class="text-button" type="button">＋ 添加网站</button><p id="source-links-result" class="hint" role="status"></p><details class="supported-sites"><summary>支持哪些网站？</summary><p class="hint">SmartEstu、课堂派、学习通、智夫子、YOJ、人大未来课堂、TUOJ、微人大课表与考试。其他网站先在原页面核对识别结果，确认后导入。</p></details></div></section>
+  <section id="website-setup" class="guide-step" aria-labelledby="sync-tab-3" data-step="3" hidden><h3>添加网站</h3><div class="step-body"><p class="hint">打开作业网站、课表或校历网页，将要同步的页面链接添加到这里。</p><div id="website-list"></div><form id="source-links-form" hidden><label for="source-url">网站页面链接</label><div class="website-input"><input id="source-url" type="url" required placeholder="https://…" spellcheck="false" autocomplete="off"><button class="secondary" id="save-source-link" type="submit">确认</button><button class="text-button" id="cancel-source-link" type="button">取消</button></div></form><button id="add-source-link" class="text-button" type="button">＋ 添加网站</button><p id="source-links-result" class="hint" role="status"></p><details class="supported-sites"><summary>支持哪些网站？</summary><p class="hint">作业网站、课表与考试网页按适配情况导入。校历等其他网页可尝试识别，先核对预览，再确认导入。</p></details></div></section>
   <section id="cloud-settings" class="guide-step" aria-labelledby="sync-tab-4" data-step="4" hidden><h3>开启云端同步 <span class="optional">可跳过</span></h3><div class="step-body">
-    <p id="cloud-grant-state" class="cloud-grant-state" role="status">正在检查…</p><p class="hint">电脑关机后仍可更新。微人大、YOJ 及通用识别网站需浏览器运行。</p>
+    <p id="cloud-grant-state" class="cloud-grant-state" role="status">正在检查…</p><p class="hint">支持云端同步的作业网站，电脑关机后仍可更新。课表、考试与仅支持浏览器识别的网页需浏览器运行。</p>
     <div id="cloud-panel"></div><button id="cloud-authorize" class="secondary" disabled>载入云端同步</button>
     <button id="cloud-revoke" class="text-button" hidden>关闭云端同步</button>
   </div></section>
   <section id="sync-results" class="guide-step" aria-labelledby="sync-tab-5" data-step="5" hidden><h3>同步与检查</h3><div class="step-body"><div class="sync-toolbar"><p id="cloud-status" class="muted" role="status">正在检查同步状态…</p><button id="collector-scan" class="primary" disabled>一键同步</button></div><p id="sync-mode-note" class="hint"></p><div id="sources-list"></div><div id="unsupported-links"></div></div></section>
   <p id="source-error" class="error" role="alert"></p><div class="sync-step-actions"><button id="sync-prev" class="secondary">上一步</button><button id="sync-next" class="primary">下一步</button></div>
+</dialog>
+<dialog id="daily-summary-dialog" aria-labelledby="daily-summary-title">
+  <div class="dialog-heading"><h2 id="daily-summary-title">今日总结</h2><button class="icon-button close-dialog" aria-label="关闭每日总结">×</button></div>
+  <p id="daily-summary-date" class="hint"></p>
+  <div id="daily-summary-content" aria-live="polite"></div>
+  <p id="daily-summary-error" class="error" role="alert"></p>
+  <div class="dialog-actions"><button id="daily-summary-retry" class="secondary" hidden>重新读取</button><button class="primary close-dialog">继续今天</button></div>
 </dialog>
 <dialog id="messages-dialog" aria-labelledby="messages-title">
   <div class="dialog-heading"><h2 id="messages-title">消息看板</h2><button class="icon-button close-dialog" aria-label="关闭消息看板">×</button></div>
@@ -160,7 +217,8 @@
   <div class="dialog-heading"><h2>任务详情</h2><button class="icon-button close-dialog" aria-label="关闭详情">×</button></div>
   <div id="archive-detail"></div>
 </dialog>
-<dialog id="delete-dialog"><h2>删除这项任务？</h2><p>从教学网站导入的任务，删除后不会再次自动加入。</p><div class="dialog-actions"><button class="secondary close-dialog">取消</button><button id="confirm-delete" class="danger">删除任务</button></div></dialog>
+<dialog id="delete-dialog" aria-labelledby="delete-title" aria-describedby="delete-message"><div class="dialog-heading"><h2 id="delete-title">删除这张卡片？</h2><button type="button" class="icon-button close-dialog" aria-label="关闭删除确认">×</button></div><p id="delete-message"></p><div class="dialog-actions"><button class="secondary close-dialog">取消</button><button id="confirm-delete" class="danger">删除卡片</button></div></dialog>
+<dialog id="focus-end-dialog" aria-labelledby="focus-end-title"><form method="dialog"><div class="dialog-heading"><h2 id="focus-end-title">结束此次专注？</h2><button class="icon-button" value="cancel" aria-label="关闭结束确认">×</button></div><p id="focus-end-message">您已结束本次专注，是否需要保留记录？</p><div class="dialog-actions"><button value="discard" class="secondary">不保存</button><button value="save" class="primary">保存专注</button></div></form></dialog>
 <dialog id="action-confirm-dialog" role="alertdialog" aria-labelledby="action-confirm-title" aria-describedby="action-confirm-message">
   <form method="dialog">
     <div class="dialog-heading"><h2 id="action-confirm-title"></h2><button class="icon-button" value="cancel" aria-label="关闭确认弹窗">×</button></div>

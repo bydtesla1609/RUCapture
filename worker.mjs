@@ -1,5 +1,6 @@
 import {cloudStatus,enableCloud,revokeCloud,saveCloudRecipe,runCloud} from "./cloud.mjs";
 import "./extension/academic-parser.js";
+import {planningRoute,planningState,pruneFocus,focusFileSQL} from "./planning.mjs";
 export const SOURCES = {
   yoj: {name:"YOJ",url:"http://yoj.ruc.edu.cn/index.php/index/course/detail.html",browser_only:true},
   weilai: {name:"人大未来课堂",url:"https://k.ruc.edu.cn/UserClient/homePage.html"},
@@ -57,6 +58,7 @@ export const RELEASES=[
 ];
 export const RELEASE=RELEASES[0];
 export async function autoArchive(db,time=Date.now()) {
+  await pruneFocus(db,time);
   const stamp=new Date(time).toISOString(),cutoff=new Date(time-7*86400000).toISOString();
   return db.prepare("UPDATE tasks SET archived_at=?,updated_at=?,revision=revision+1 WHERE deleted=0 AND archived_at IS NULL AND category NOT IN ('课程','记录') AND status='done' AND datetime(completed_at)<=datetime(?) AND (archive_restored_at IS NULL OR datetime(archive_restored_at)<=datetime(?))").bind(stamp,stamp,cutoff,cutoff).run();
 }
@@ -270,7 +272,7 @@ async function uploadFile(request,db,fileLimit=FILE_LIMIT,storageLimit=STORAGE_L
   else if(head.startsWith("GIF87a") || head.startsWith("GIF89a")) type="image/gif";
   else if(head.startsWith("RIFF") && head.slice(8,12)==="WEBP") type="image/webp";
   // ponytail: small personal files share D1; move binaries to R2 above the 100 MB cap.
-  await db.prepare("DELETE FROM files WHERE created_at<? AND id NOT IN (SELECT value FROM tasks,json_each(tasks.attachments) WHERE tasks.deleted=0)").bind(new Date(Date.now()-86400000).toISOString()).run();
+  await db.prepare(`DELETE FROM files WHERE created_at<? AND id NOT IN (SELECT value FROM tasks,json_each(tasks.attachments) WHERE tasks.deleted=0) AND id NOT IN (${focusFileSQL}?)`).bind(new Date(Date.now()-86400000).toISOString(),new Date(Date.now()-7*86400000).toISOString()).run();
   const id=crypto.randomUUID();
   const statements=[db.prepare("INSERT INTO files(id,name,type,size,created_at) SELECT ?,?,?,?,? WHERE (SELECT coalesce(sum(size),0) FROM files)+?<=?").bind(id,name,type,file.size,now(),file.size,storageLimit)];
   for(let offset=0,part=0;offset<data.length;offset+=CHUNK_SIZE,part++) {
@@ -281,7 +283,7 @@ async function uploadFile(request,db,fileLimit=FILE_LIMIT,storageLimit=STORAGE_L
   return json({id,name,type,size:file.size},201);
 }
 async function downloadFile(request,db,id) {
-  const file=await db.prepare("SELECT * FROM files WHERE id=? AND EXISTS(SELECT 1 FROM tasks,json_each(tasks.attachments) WHERE tasks.deleted=0 AND json_each.value=files.id)").bind(id).first();
+  const file=await db.prepare(`SELECT * FROM files WHERE id=? AND (EXISTS(SELECT 1 FROM tasks,json_each(tasks.attachments) WHERE tasks.deleted=0 AND json_each.value=files.id) OR id IN (${focusFileSQL}?))`).bind(id,new Date(Date.now()-7*86400000).toISOString()).first();
   if(!file) fail(404,"附件不存在或尚未保存到任务");
   let start=0,end=file.size-1,status=200;
   const range=request.headers.get("Range");
@@ -315,7 +317,7 @@ async function route(request, env) {
   const url=new URL(request.url), path=url.pathname, method=request.method, db=env.DB;
   if(!path.startsWith("/api/")) {
     if(method!=="GET" && method!=="HEAD") fail(405,"不支持此操作");
-    if(path!=="/" && !["/static/app.js","/static/capture.js","/static/axis-layout.js","/static/messages.js","/static/style.css","/static/icon.svg","/extension.zip"].includes(path)) fail(404,"页面不存在");
+    if(path!=="/" && !["/static/app.js","/static/planning.js","/static/capture.js","/static/axis-layout.js","/static/messages.js","/static/style.css","/static/effects.css","/static/icon.svg","/extension.zip"].includes(path)) fail(404,"页面不存在");
     const assetURL=new URL(request.url); assetURL.pathname=path.replace(/^\/static\//,"/");
     return env.ASSETS.fetch(new Request(assetURL,request));
   }
@@ -346,13 +348,16 @@ async function route(request, env) {
     await collectorAuth(request,db);const input=globalThis.RUAcademic.courseInput((await body(request)).academic),table=globalThis.RUAcademic.timetable(input);
     await db.prepare("INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE settings.value IS NOT excluded.value").bind(`timetable:${input.semester}`,JSON.stringify(table)).run();return json({ok:true});
   }
-  if(path==="/api/collector-config" && method==="GET") { await collectorAuth(request,db); return json({sources:await allSources(env),links:await savedLinks(env),account:env.TRIAL_USER || "personal",cloud_enabled:(await cloudStatus(env)).enabled}); }
+  if(path==="/api/collector-config" && method==="GET") { await collectorAuth(request,db); const cloud=await cloudStatus(env);return json({sources:await allSources(env),links:await savedLinks(env),account:env.TRIAL_USER || "personal",cloud_enabled:cloud.enabled,cloud_sources:cloud.sources}); }
   if(path==="/api/cloud-authorize" && method==="POST") {await collectorAuth(request,db);return json(await enableCloud(env));}
   if(path==="/api/cloud-credentials" && method==="POST") {await collectorAuth(request,db);const value=await body(request);return json(await saveCloudRecipe(env,value.source,value.recipe));}
   const hash=await sessionHash(request);
   const authenticated=env.TRIAL_AUTHENTICATED===true || !!(await db.prepare("SELECT 1 FROM sessions WHERE hash=? AND expires>?").bind(hash,Date.now()).first());
   if(path==="/api/session" && method==="GET") return json({authenticated});
   if(!authenticated) fail(401,"请先登录看板");
+  if(path.startsWith('/api/quadrant/') || /^\/api\/focus(?:\/|$)/.test(path)) {
+    const result=await planningRoute(request,db,{body,validate,fileReferences,withFiles,FIELDS,stored});if(result)return result;
+  }
   if(path==="/api/notices" && method==="GET"){
     const row=await db.prepare("SELECT value FROM settings WHERE key='read_release'").first();return json({release:RELEASE,releases:RELEASES,unread:row?.value!==RELEASE.version});
   }
@@ -390,7 +395,39 @@ async function route(request, env) {
     await db.prepare("DELETE FROM sessions WHERE hash=?").bind(hash).run();
     return json({ok:true},200,{"Set-Cookie":cookie(request,"",0)});
   }
-  if(path==="/api/board" && method==="GET") {
+  if(path==="/api/preferences" && method==="PUT") {
+    const value=await body(request);if(typeof value.effects!=="boolean")fail(400,"请选择开启或关闭视觉效果");
+    await db.prepare("INSERT INTO settings(key,value) VALUES ('visual_effects',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE settings.value IS NOT excluded.value").bind(value.effects?"1":"0").run();
+    return json({effects:value.effects});
+  }
+  if(path==="/api/daily-summary" && method==="GET") {
+    const period=url.searchParams.get("period") || "today";
+    if(!["today","yesterday"].includes(period))fail(400,"请选择今日或昨日总结");
+    const stamp=Date.now(),today=new Date(stamp+8*3600000).toISOString().slice(0,10);
+    const day=new Date(stamp+8*3600000-(period==="yesterday"?86400000:0)).toISOString().slice(0,10);
+    const start=new Date(`${day}T00:00:00+08:00`).toISOString();
+    const end=new Date(Math.min(Date.parse(start)+86400000,stamp+1)).toISOString();
+    const items=await db.prepare("SELECT id,title,category,completed_at,archived_at FROM tasks WHERE deleted=0 AND status='done' AND completed_at>=? AND completed_at<? ORDER BY completed_at,id").bind(start,end).all();
+    return json({day,today,tasks:items.results,generated_at:new Date(stamp).toISOString()});
+  }
+  if(path==="/api/daily-summary/seen" && method==="POST") {
+    const {day}=await body(request),today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+    if(day!==today)fail(400,"日期已变更，请重新打开总结");
+    // Only the display date is retained; the summary itself is always derived from tasks.
+    await db.prepare("INSERT INTO settings(key,value) VALUES ('daily_summary_seen',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE settings.value<excluded.value").bind(today).run();
+    return json({day:today});
+  }
+  if(["/api/board","/api/sync"].includes(path) && method==="GET") {
+    let sync={};
+    if(path==="/api/sync") {
+      const marker=await db.prepare("SELECT value FROM settings WHERE key='sync_revision'").first();
+      const preferences=await db.prepare("SELECT key,value FROM settings WHERE key IN ('visual_effects','daily_summary_seen')").all();
+      const preference=Object.fromEntries(preferences.results.map(row=>[row.key,row.value]));
+      sync={sync_revision:marker?.value ?? null,effects:preference.visual_effects!=="0",summary_seen_date:preference.daily_summary_seen || null,cloud:await cloudStatus(env),server_time:now()};
+      if(marker && url.searchParams.get("revision")===marker.value)return json({...sync,unchanged:true});
+      const focusRequest=new Request(new URL("/api/focus",url),{headers:request.headers});
+      sync.focus=await (await planningRoute(focusRequest,db,{body,validate,fileReferences,withFiles,FIELDS,stored})).json();
+    }
     await autoArchive(db);
     const [tasks,sources,files,storage]=await db.batch([db.prepare("SELECT * FROM tasks WHERE deleted=0 AND archived_at IS NULL ORDER BY created_at DESC"),db.prepare("SELECT sources.*, (SELECT count(*) FROM tasks WHERE tasks.source=sources.id AND tasks.deleted=0) AS imported_count, (SELECT count(*) FROM tasks WHERE tasks.source=sources.id AND tasks.deleted=0 AND tasks.source_status IS NOT NULL) AS status_count FROM sources"),
       db.prepare("SELECT id,name,type,size FROM files WHERE id IN (SELECT value FROM tasks,json_each(tasks.attachments) WHERE tasks.deleted=0)"),db.prepare("SELECT coalesce(sum(size),0) AS used FROM files")]);
@@ -400,7 +437,7 @@ async function route(request, env) {
     const axes=await db.prepare("SELECT * FROM axes WHERE deleted=0 ORDER BY created_at,id").all();
     const axisLayout=await db.prepare("SELECT value FROM settings WHERE key='axis_layout'").first();
     const axisItems=await db.prepare("SELECT * FROM tasks WHERE deleted=0 AND axis_id IN (SELECT id FROM axes WHERE deleted=0)").all();
-    return json({axis_layout:axisLayout?JSON.parse(axisLayout.value):{revision:0,layout:null},axes:axes.results,axis_items:axisItems.results.map(task=>expose(task,byId)),tasks:tasks.results.map(task=>expose(task,byId)),timetables:tables.results.map(row=>JSON.parse(row.value)),sources:Object.entries(configuration).map(([id,config])=>({id,last_seen:null,task_count:0,imported_count:0,status_count:0,...sources.results.find(source=>source.id===id),...config})),storage:{used:storage.results[0].used,limit:env.TRIAL_MODE?5*1024*1024:STORAGE_LIMIT,file_limit:env.TRIAL_MODE?1024*1024:FILE_LIMIT},server_time:now()});
+    return json({...sync,quadrants:await planningState(db),axis_layout:axisLayout?JSON.parse(axisLayout.value):{revision:0,layout:null},axes:axes.results,axis_items:axisItems.results.map(task=>expose(task,byId)),tasks:tasks.results.map(task=>expose(task,byId)),timetables:tables.results.map(row=>JSON.parse(row.value)),sources:Object.entries(configuration).map(([id,config])=>({id,last_seen:null,task_count:0,imported_count:0,status_count:0,...sources.results.find(source=>source.id===id),...config})),storage:{used:storage.results[0].used,limit:env.TRIAL_MODE?5*1024*1024:STORAGE_LIMIT,file_limit:env.TRIAL_MODE?1024*1024:FILE_LIMIT},server_time:now()});
   }
   if(path==="/api/archive" && method==="GET") {
     await autoArchive(db);
@@ -459,12 +496,20 @@ async function route(request, env) {
     if(!row)fail(409,"轴线已更新，请重新打开");return json(row);
   }
   if(path==="/api/tasks" && method==="POST") {
-    const task=validate(await body(request)), id=crypto.randomUUID(), stamp=now();
+    const input=await body(request),task=validate(input),id=input.id ?? crypto.randomUUID(),stamp=now();
+    if(typeof id!=="string" || !/^[a-zA-Z0-9-]{1,50}$/.test(id))fail(400,"卡片编号不正确");
+    const prior=await db.prepare("SELECT * FROM tasks WHERE id=?").bind(id).first();
+    if(prior){
+      if(prior.deleted || FIELDS.some(field=>stored(task,field)!==prior[field]))fail(409,"上一次保存已成功，请刷新后编辑已保存的卡片；当前输入仍保留。");
+      return json(await withFiles(prior,db));
+    }
     await fileReferences(task.attachments,db);
     if(task.axis_id && !await db.prepare("SELECT 1 FROM axes WHERE id=? AND deleted=0").bind(task.axis_id).first())fail(400,"轴线不存在，请重新选择");
     const row=await db.prepare(`INSERT INTO tasks(id,${FIELDS.join(",")},created_at,updated_at,completed_at)
-      VALUES (${Array(FIELDS.length+4).fill("?").join(",")}) RETURNING *`).bind(id,...FIELDS.map(f=>stored(task,f)),stamp,stamp,completedAt(task.status,null,stamp)).first();
-    return json(await withFiles(row,db),201);
+      VALUES (${Array(FIELDS.length+4).fill("?").join(",")}) ON CONFLICT(id) DO NOTHING RETURNING *`).bind(id,...FIELDS.map(f=>stored(task,f)),stamp,stamp,completedAt(task.status,null,stamp)).first();
+    const saved=row || await db.prepare("SELECT * FROM tasks WHERE id=?").bind(id).first();
+    if(!row && (saved.deleted || FIELDS.some(field=>stored(task,field)!==saved[field])))fail(409,"这张卡片已保存，请刷新后继续编辑");
+    return json(await withFiles(saved,db),row?201:200);
   }
   const archiveMatch=path.match(/^\/api\/tasks\/([a-zA-Z0-9-]{1,50})\/archive$/);
   if(archiveMatch && method==="PATCH"){
