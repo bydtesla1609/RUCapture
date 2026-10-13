@@ -867,7 +867,7 @@ async function checkCollector() {
 }
 function websiteName(link) {
   const id=link.source || link.id;
-  return id==="ruc_courses"?"课表与考试网页":id==="ruc_exams"?"考试安排网页":link.generic?"网站页面":"作业网站";
+  return link.name || sources.find(source=>source.id===id)?.name || (link.url?new URL(link.url).hostname:"网站页面");
 }
 async function setupGeneric(link) {
   if(!collectorState?.connected)throw new Error("请先完成第 2 步连接扩展，再点击此网站的识别设置。");
@@ -1017,15 +1017,17 @@ function renderSources() {
     const total=cloud?.last_success?cloud.count:source.task_count;
     const incomplete=!academic && total>0 && (cloud?.last_success ? cloud.status_count<cloud.count : source.imported_count>source.status_count);
     const expired=needsLogin(source);
-    const label=expired?"登录过期":error?"需处理":incomplete?"状态不完整":seen && total===0?"已验证 · 暂无作业":fresh?"已同步":seen?"等待更新":"待验证";
-    const displayName=`${websiteName(source)} · ${new URL(sourceURL(source)).hostname}`;
+    const contentName=source.id==="ruc_exams"?"考试安排":academic?"课程":"作业";
+    const countText=`${total} ${source.id==="ruc_exams"?"场考试":academic?"节课程":"项作业"}`;
+    const label=expired?"登录过期":error?"需处理":incomplete?"状态不完整":seen && total===0?`已验证 · 暂无${contentName}`:fresh?"已同步":seen?"等待更新":"待验证";
+    const name=websiteName(source),host=new URL(sourceURL(source)).hostname,displayName=name===host?name:`${name} · ${host}`;
     header.append(expired?element("strong",displayName):externalLink(`${displayName} ↗`,sourceURL(source)),element("span",label,"state"+(fresh && !error && !incomplete?" connected":"")));
-    const sync=element("button","同步","secondary source-sync");sync.type="button";sync.setAttribute("aria-label",`同步：${displayName}`);
+    const sync=element("button","同步","secondary source-sync");sync.type="button";sync.setAttribute("aria-label",`同步：${name}`);
     sync.disabled=syncing || !(collectorState?.connected && collectorState.enabled || !browserOnly && cloudState?.enabled && cloud?.authorized);
     sync.onclick=()=>syncSources(source.id);
     if(expired){const actions=element("div",null,"source-actions");actions.append(loginLink(source),sync);header.append(actions);}else header.append(sync);
     row.append(header);
-    row.append(element("p",expired?"重新登录后，点击此网站的“同步”。仍未恢复时，回第 4 步更新。":error || (seen?`${formatTime(seen)} · ${total} 项${academic?"日程":"作业"}${incomplete?" · 部分完成状态未识别":""}`:cloud?.authorized?"已连接云端，等待同步":"等待首次同步")));
+    row.append(element("p",expired?"重新登录后，点击此网站的“同步”。仍未恢复时，回第 4 步更新。":error || (seen?`${formatTime(seen)} · ${countText}${incomplete?" · 部分完成状态未识别":""}`:cloud?.authorized?"已连接云端，等待同步":"等待首次同步")));
     if(source.generic)row.append(element("p","通过浏览器同步；识别结果可在第 3 步调整。","hint"));
     else if(source.browser_only)row.append(element("p","此网站通过电脑浏览器同步。","hint"));
     if(!browserOnly && cloudState?.enabled && !cloud?.authorized)row.append(element("p","尚未开启此网站的云端同步，可回第 4 步更新。","hint"));

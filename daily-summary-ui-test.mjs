@@ -47,7 +47,7 @@ try{
   const phoneContext=await browser.newContext({viewport:{width:320,height:720},isMobile:true,hasTouch:true,storageState:await context.storageState()});
   const phone=await phoneContext.newPage();phone.on('pageerror',error=>errors.push(error.stack));await phone.goto(origin);await phone.waitForFunction(()=>messageReady);
   assert.equal(await phone.locator('#daily-summary-dialog').isVisible(),false);
-  await phone.locator('#user-menu-toggle').click();await phone.locator('#daily-summary-button').click();await phone.waitForFunction(()=>document.querySelector('.daily-summary-quote'));
+  await phone.locator('#mobile-nav-toggle').click();await phone.locator('#user-menu-toggle').click();await phone.locator('#daily-summary-button').click();await phone.waitForFunction(()=>document.querySelector('.daily-summary-quote'));
   assert.ok(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth && document.querySelector('#daily-summary-dialog').scrollWidth<=document.querySelector('#daily-summary-dialog').clientWidth));
   await phone.waitForTimeout(300);await phone.screenshot({path:'data/screenshots/daily-summary-mobile.png'});
   await phone.evaluate(()=>applyEffects(false));assert.equal(await phone.locator('.daily-summary-total strong').textContent(),'1');await phone.locator('#daily-summary-dialog .primary').click();
@@ -62,7 +62,28 @@ try{
   await page.reload();await page.locator('#daily-summary-retry').waitFor({state:'visible'});assert.equal(database.prepare("SELECT value FROM settings WHERE key='daily_summary_seen'").get(),undefined);
   await page.unroute('**/api/daily-summary?period=yesterday');await page.locator('#daily-summary-retry').click();await page.waitForFunction(()=>document.querySelector('.daily-summary-quote'));await page.locator('#daily-summary-dialog .primary').click();
   assert.deepEqual(await page.locator('.collect-origins>span').allTextContents(),['作 作业网站','课 在线课堂','学 课程平台']);
-  assert.doesNotMatch(await page.locator('#sources-dialog').textContent(),/SmartEstu|微人大|数你最灵/);
-  assert.deepEqual(await page.evaluate(()=>[websiteName({source:'smartestu'}),websiteName({source:'ruc_courses'}),websiteName({id:'ruc_exams'}),websiteName({generic:true})]),['作业网站','课表与考试网页','考试安排网页','网站页面']);
-  assert.deepEqual(errors,[]);console.log('PASS: automatic yesterday summary, daily/account gate, fresh non-repeating encouragement, today completion, aligned menu, 320px layout, quiet mode, draft deferral and retry.');
+  assert.doesNotMatch(await page.locator('#login').textContent(),/SmartEstu|微人大|数你最灵/);
+  assert.deepEqual(await page.evaluate(()=>[websiteName({source:'smartestu'}),websiteName({source:'ruc_courses'}),websiteName({id:'ruc_exams'}),websiteName({generic:true,url:'https://course.example/homework'})]),['SmartEstu','人大课表','人大考试','course.example']);
+  await page.evaluate(()=>loadSourceLinks());
+  // Real configuration names stay specific; each source describes its own imported content.
+  assert.deepEqual(await page.locator('#website-list .website-row strong').allTextContents(),['SmartEstu','课堂派','学习通','人大课表']);
+  await page.locator('#sources-button').click();await page.evaluate(async()=>{await checkCollector();setSyncStep(5);});
+  const sourceCopy=await page.evaluate(()=>({sources,cloudState,collectorState}));
+  await page.evaluate(()=>{cloudState={enabled:false};collectorState={connected:true,enabled:true,sourceResults:{}};sources=sources.map(source=>({...source,error:null,last_seen:new Date().toISOString(),task_count:0}));renderSources();});
+  for(const [name,empty,count] of [['SmartEstu','暂无作业','0 项作业'],['人大课表','暂无课程','0 节课程'],['人大考试','暂无考试安排','0 场考试']]){
+    const row=page.locator('.source-row').filter({has:page.getByRole('button',{name:`同步：${name}`,exact:true})});
+    assert.equal(await row.locator('.state').textContent(),`已验证 · ${empty}`);
+    assert.ok((await row.locator('p').first().textContent()).includes(count));
+    assert.ok((await row.locator('a').first().textContent()).startsWith(name+' · '));
+  }
+  await page.evaluate(()=>{sources=sources.map(source=>({...source,task_count:2,imported_count:2,status_count:2}));renderSources();});
+  for(const [name,count] of [['SmartEstu','2 项作业'],['人大课表','2 节课程'],['人大考试','2 场考试']]){
+    const row=page.locator('.source-row').filter({has:page.getByRole('button',{name:`同步：${name}`,exact:true})});
+    assert.equal(await row.locator('.state').textContent(),'已同步');assert.ok((await row.locator('p').first().textContent()).includes(count));
+  }
+  await page.evaluate(()=>{sources=sources.map(source=>({...source,last_seen:null,task_count:0,error:source.id==='ruc_exams'?'考试安排读取失败':null}));renderSources();});
+  assert.equal(await page.locator('.source-row').filter({has:page.getByRole('button',{name:'同步：人大考试',exact:true})}).locator('.state').textContent(),'需处理');
+  assert.equal(await page.locator('.source-row').filter({has:page.getByRole('button',{name:'同步：人大课表',exact:true})}).locator('.state').textContent(),'待验证');
+  await page.evaluate(saved=>{sources=saved.sources;cloudState=saved.cloudState;collectorState=saved.collectorState;renderSources();},sourceCopy);
+  assert.deepEqual(errors,[]);console.log('PASS: daily summaries and mobile menu; generic promotional copy, real configuration names, and source-specific empty, populated, pending and error states.');
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));database.close();await rm(directory,{recursive:true,force:true});}
