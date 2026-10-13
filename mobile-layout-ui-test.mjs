@@ -66,7 +66,7 @@ try{
       send('touchstart',...from);for(let i=1;i<=6;i++)send('touchmove',from[0]+(to[0]-from[0])*i/6,from[1]+(to[1]-from[1])*i/6);send(cancel?'touchcancel':'touchend',...to);
     },{from,to,cancel,target});
   }
-  const rest=await nav.boundingBox();assert.ok(await nav.evaluate(n=>Number(getComputedStyle(n).backgroundColor.match(/[\d.]+/g).at(-1))<.1),'navigation button uses a transparent surface');
+  const rest=await nav.boundingBox();const glass=await nav.evaluate(n=>{const s=getComputedStyle(n);return {alpha:Number(s.backgroundColor.match(/[\d.]+/g).at(-1)),blur:s.backdropFilter || s.webkitBackdropFilter};});assert.ok(glass.alpha>0 && glass.alpha<.6,'navigation glass remains translucent');assert.match(glass.blur,/blur\(14px\)/,'navigation glass blurs content behind it');
   await swipe([40,280],[180,282]);assert.equal(await nav.getAttribute('aria-expanded'),'true','right swipe opens');
   let navBox=await nav.boundingBox(),mainBox=await page.locator('main').boundingBox(),drawerBox=await page.locator('#sidebar').boundingBox();
   assert.ok(Math.abs(navBox.x-rest.x-mainBox.x)<1 && Math.abs(mainBox.x-drawerBox.width)<1,'toggle and page move together by the drawer width');
@@ -118,7 +118,7 @@ try{
   await page.locator('#demo-dialog').waitFor({state:'hidden'});assert.equal(await nav.getAttribute('aria-expanded'),'false');
   await page.setViewportSize({width:1440,height:1050});await page.waitForFunction(()=>!mobileNavigation.matches && !document.getElementById('sidebar').inert);assert.equal(await nav.isVisible(),false);assert.equal(await page.locator('#workspace').evaluate(n=>n.classList.contains('sidebar-collapsed')),true);
   await page.locator('#sidebar-toggle').click();assert.equal(await page.locator('#workspace').evaluate(n=>n.classList.contains('sidebar-collapsed')),false);
-  assert.deepEqual(errors,[]);console.log(`Mobile layout passed (${engine.name()}): transparent moving toggle, swipe/cancel/vertical scroll, synchronized spring motion, axis selection/create/save, drawer and focus, account menu, calendar filtering/navigation, tour, 320–1440px, effects on/off.`);
+  assert.deepEqual(errors,[]);console.log(`Mobile layout passed (${engine.name()}): frosted-glass moving toggle, swipe/cancel/vertical scroll, synchronized spring motion, axis selection/create/save, drawer and focus, account menu, calendar filtering/navigation, tour, 320–1440px, effects on/off.`);
 }finally{
   await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));database.close();
   assert.ok(resolve(directory).startsWith(resolve(tmpdir())+'\\'));await rm(directory,{recursive:true,force:true});
