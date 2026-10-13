@@ -78,6 +78,27 @@ try{
  }
  await page.evaluate(()=>{categoryFilter='全部';overviewView='calendar';selectedDay='2099-10-15';calendarMonth='2099-10';render();});
  assert.equal(await page.locator('.day-agenda .card-axis-select').count(),5);assert.equal(await page.locator('article[data-category="课程"] .card-axis-select').count(),0);
+ // Calendar cards also open an editor on body click. Child controls must never do that,
+ // including clicks on text/arrows that are replaced while opening the picker.
+ for(const width of [1440,390,320]){
+  await page.setViewportSize({width,height:1000});const activate=node=>width===1440?node.click():node.tap();
+  for(const item of fixture.items.filter(t=>t.category!=='课程')){
+   const node=page.locator(`article[data-task-id="${item.id}"]`),axis=node.locator('.card-axis-select').locator('..');
+   for(const select of item.category==='作业'?[node.locator('.task-status').locator('..'),axis]:[axis]){
+    for(const part of ['.select-value','.select-arrow']){
+     await activate(select.locator(part).first());assert.equal(await page.locator('#task-dialog').isVisible(),false,'first click on a calendar control must not open the editor');assert.equal(await select.locator('.select-menu').isVisible(),true);
+     await activate(select.locator(part).first());assert.equal(await page.locator('#task-dialog').isVisible(),false);assert.equal(await select.locator('.select-menu').isVisible(),false);
+    }
+   }
+   await activate(axis.locator('.select-value').first());await activate(axis.getByRole('option',{name:fixture.a.title,exact:true}));await page.waitForFunction(()=>!document.getElementById('board').dataset.busy);
+   assert.equal(await page.locator('#task-dialog').isVisible(),false);assert.equal(row(item.id).axis_id,fixture.a.id);
+   if(item.category==='作业'){
+    const state=node.locator('.task-status').locator('..');await activate(state.locator('.select-value').first());await activate(state.getByRole('option',{name:'进行中',exact:true}));
+   }else await activate(node.locator('.completion-control'));
+   await page.waitForFunction(()=>!document.querySelector('.task[data-busy]'));assert.equal(await page.locator('#task-dialog').isVisible(),false,'status changes stay on the calendar');
+   await activate(node.locator('.task-title'));assert.equal(await page.locator('#task-dialog').isVisible(),true,'card body still opens the editor');await activate(page.locator('#task-dialog .close-dialog').first());
+  }
+ }
  // Long labels truncate on the card and remain readable in the popover, including touch.
  await category('作业');await choose(fixture.b.title);await mkdir('data/screenshots',{recursive:true});
  for(const width of [320,390,1440]){

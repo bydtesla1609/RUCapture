@@ -743,7 +743,8 @@ function renderCalendar() {
     const row=element("div",null,"agenda-row");
     for(const task of matching.slice(index,index+3)){
       const entry=element("div",null,"agenda-entry"),time=element("div",null,"agenda-time"),event=card(task);time.append(element("span",timelineTime(task)));
-      event.classList.add("calendar-event");event.onclick=e=>{if(!e.target.closest("button,input,select,textarea,a,label") && !window.getSelection()?.toString())openTask(tasks.find(item=>item.id===task.id) || task);};
+      // Controls can replace their clicked text while opening; use the original event path.
+      event.classList.add("calendar-event");event.onclick=e=>{if(!e.composedPath().some(node=>node.matches?.("button,input,select,textarea,a,label")) && !window.getSelection()?.toString())openTask(tasks.find(item=>item.id===task.id) || task);};
       entry.append(time,event);row.append(entry);
     }
     list.append(row);
