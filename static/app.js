@@ -457,6 +457,33 @@ function card(task) {
   };
   if(task.category==="作业")footer.append(status);
   else if(task.category!=="课程") {const label=element("label",null,"completion-control");label.append(status,document.createTextNode(task.category==="记录"?"已完善":"已完成"));footer.append(label);}
+  if(task.category!=="课程"){
+    const controls=element("div",null,"card-state-controls"),axisSelect=element("select",null,"card-axis-select");
+    axisSelect.setAttribute("aria-label",`所属轴线：${task.title}`);axisSelect.dataset.emptyLabel="所属轴线";
+    controls.append(...footer.childNodes,axisSelect);footer.append(controls);fillAxisSelect(task.axis_id,axisSelect);
+    async function saveAxis(axisId,created=false){
+      const restore=()=>fillAxisSelect(task.axis_id,axisSelect);
+      if(hasDraft()){restore();notice("请先保存或取消正在编辑的待办事项");return;}
+      if((task.axis_id || "")===(axisId || ""))return;
+      const session=syncSession,latest=tasks.find(item=>item.id===task.id);
+      if(!latest){restore();notice("这张卡片已不在看板中，请刷新后查看。");return;}
+      const busyKey=`axis:${session}`;$("board").dataset.busy=busyKey;
+      const visible=document.querySelector(`.task[data-task-id="${task.id}"]`) || article;
+      visible.setAttribute("aria-busy","true");visible.querySelectorAll("button,input,select").forEach(node=>node.disabled=true);
+      try{
+        const updated=await api(`/api/tasks/${task.id}`,"PATCH",{axis_id:axisId || null,revision:latest.revision});
+        if(session!==syncSession)return;
+        tasks=tasks.map(item=>item.id===updated.id?updated:item);axisItems=axisItems.map(item=>item.id===updated.id?updated:item);task=current=updated;lastPayload="";
+        notice(axisId?"已更新所属轴线":"已移出轴线");
+      }catch(error){if(session===syncSession)notice(`${created?"轴线已创建，卡片归属未更新：":"归属未更新："}${error.message}`);}
+      finally{
+        if($("board").dataset.busy===busyKey)delete $("board").dataset.busy;visible.removeAttribute("aria-busy");visible.querySelectorAll("button,input,select").forEach(node=>node.disabled=false);
+        if(session===syncSession){restore();if(!hasDraft())render();await refresh();}
+      }
+    }
+    axisSelect.onchange=()=>saveAxis(axisSelect.value);
+    axisSelect.onAxisCreated=id=>saveAxis(id,true);
+  }
   const footerMain=element("div",null,"task-footer-main");footerMain.append(...footer.childNodes);const original=taskSourceLink(task);if(original){original.classList.add("task-original-link");meta.lastChild.append(original);}footer.append(footerMain);
   const actions = element("div", null, "task-actions");
   const edit = element("button", "编辑", "edit-task");

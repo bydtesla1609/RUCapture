@@ -512,3 +512,16 @@ html{transition:opacity .22s ease}html.effects-fading{opacity:.45}
   .task-footer-main{flex-wrap:wrap}
 }
 @media(prefers-reduced-motion:reduce){#workspace>main,#workspace>.sidebar,.mobile-nav-toggle,.mobile-nav-toggle svg,.mobile-nav-backdrop{transition:none}}
+
+/* Card status and axis membership share one aligned row, actions wrap as a group. */
+.task-footer-main:has(.card-state-controls){flex-wrap:wrap;gap:8px}
+.card-state-controls{display:grid;grid-template-columns:minmax(76px,.8fr) minmax(0,1.2fr);gap:8px;align-items:center;flex:1 1 220px;min-width:0}
+.card-state-controls .custom-select{width:100%;max-width:none;min-width:0}
+.card-state-controls .select-trigger{width:100%;min-height:44px;font-size:13px;padding:8px;overflow:hidden}
+.card-state-controls .select-value{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-state-controls .completion-control{margin:0;min-height:44px}
+.card-state-controls .select-menu{min-width:min(220px,calc(100vw - 16px))}
+.task-footer-main:has(.card-state-controls)>.task-actions{margin-left:auto}
+@media(max-width:680px){.card-state-controls .select-trigger{font-size:14px}.card-state-controls .completion-control{font-size:14px}}
+
+.card-state-controls .custom-select-native{contain:strict;overflow:hidden!important;appearance:none}

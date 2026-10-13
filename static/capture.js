@@ -1,24 +1,28 @@
 "use strict";
-let editingAxis=null,axisScene=null;
+let editingAxis=null,axisScene=null,newAxisSelect=null;
 const cardTime=task=>task.category==="作业"?task.due_at:task.starts_at;
 const chronological=(a,b)=>(cardTime(a)||"9999").localeCompare(cardTime(b)||"9999") || a.id.localeCompare(b.id);
 function resetAxisScene(){axisScene=null;}
-function fillAxisSelect(value){
+function fillAxisSelect(value,select=$("task-axis")){
   const create=element("option","＋ 新增轴线");create.value="create-axis";create.dataset.action="create-axis";
-  $("task-axis").replaceChildren(...[{id:"",title:"暂不加入轴线"},...axes].map(axis=>{const option=element("option",axis.title);option.value=axis.id;return option;}),create);
-  $("task-axis").value=value || "";enhanceSelect($("task-axis"));
+  select.replaceChildren(...[{id:"",title:"暂不加入轴线"},...axes].map(axis=>{const option=element("option",axis.title);option.value=axis.id;return option;}),create);
+  select.value=value || "";enhanceSelect(select);
 }
-function createAxisFromCard(){
+function createAxisFromCard(select=$("task-axis")){
+  if(select.onAxisCreated && hasDraft()){notice("请先保存或取消正在编辑的待办事项");return;}
+  newAxisSelect=select;
   $("new-axis-form").reset();$("new-axis-error").textContent="";$("new-axis-dialog").showModal();
 }
 $("new-axis-dialog").addEventListener("cancel",event=>{if($("new-axis-save").disabled)event.preventDefault();});
+$("new-axis-dialog").addEventListener("close",()=>newAxisSelect=null);
 $("new-axis-form").onsubmit=async event=>{
-  event.preventDefault();const session=syncSession,form=$("new-axis-form"),controls=form.querySelectorAll("button");
+  event.preventDefault();const session=syncSession,target=newAxisSelect,form=$("new-axis-form"),controls=form.querySelectorAll("button");
   controls.forEach(button=>button.disabled=true);$("new-axis-error").textContent="";
   try{
     const axis=await api("/api/axes","POST",{title:$("new-axis-title").value,content:$("new-axis-content").value,starts_at:inputTime($("new-axis-start").value),ends_at:inputTime($("new-axis-end").value)});
     if(session!==syncSession)return;
-    axes=axes.filter(item=>item.id!==axis.id);axes.push(axis);fillAxisSelect(axis.id);$("new-axis-dialog").close();lastPayload="";
+    axes=axes.filter(item=>item.id!==axis.id);axes.push(axis);$("new-axis-dialog").close();lastPayload="";
+    if(target?.onAxisCreated)await target.onAxisCreated(axis.id);else fillAxisSelect(axis.id,target || $("task-axis"));
     await refresh();
   }catch(error){if(session===syncSession)$("new-axis-error").textContent=error.message;}
   finally{controls.forEach(button=>button.disabled=false);}
@@ -172,11 +176,11 @@ function enhanceSelect(select){
   const wrap=element("div",null,"custom-select"),button=element("button",null,"select-trigger"),menu=element("div",null,"select-menu");button.type="button";button.setAttribute("aria-haspopup","listbox");button.setAttribute("aria-expanded","false");menu.popover="auto";menu.setAttribute("role","listbox");
   select.before(wrap);wrap.append(select,button,menu);
   const label=()=>select.getAttribute("aria-label") || document.querySelector(`label[for="${select.id}"]`)?.textContent.trim() || "选择";
-  const sync=()=>{const arrow=element("span",null,"select-arrow");arrow.setAttribute("aria-hidden","true");button.replaceChildren(element("span",select.selectedOptions[0]?.textContent || "请选择","select-value"),arrow);button.disabled=select.disabled;button.setAttribute("aria-label",label());menu.replaceChildren(...[...select.options].map(option=>{
+  const sync=()=>{const arrow=element("span",null,"select-arrow"),value=!select.value && select.dataset.emptyLabel || select.selectedOptions[0]?.textContent || "请选择";arrow.setAttribute("aria-hidden","true");button.replaceChildren(element("span",value,"select-value"),arrow);button.title=value;button.disabled=select.disabled;button.setAttribute("aria-label",label());menu.replaceChildren(...[...select.options].map(option=>{
     const action=option.dataset.action==="create-axis",entry=element("button",option.textContent,`select-option${action?" select-create-axis":""}`);
     entry.type="button";entry.setAttribute("role","option");entry.setAttribute("aria-selected",String(option.selected));entry.disabled=option.disabled;
     if(action)entry.setAttribute("aria-haspopup","dialog");
-    entry.onclick=()=>{close();button.focus();if(action){createAxisFromCard();return;}select.value=option.value;select.dispatchEvent(new Event("change",{bubbles:true}));sync();};return entry;
+    entry.onclick=()=>{close();button.focus();if(action){createAxisFromCard(select);return;}select.value=option.value;select.dispatchEvent(new Event("change",{bubbles:true}));sync();};return entry;
   }));};
   const close=()=>{if(menu.matches(":popover-open"))menu.hidePopover();button.setAttribute("aria-expanded","false");if(placeOpenSelect===placeMenu)placeOpenSelect=null;};
   const placeMenu=()=>{

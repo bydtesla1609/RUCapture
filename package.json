@@ -36,6 +36,7 @@
     "test:launch-ui": "node launch-ui-test.mjs",
     "test:free-sync-ui": "node free-sync-ui-test.mjs",
     "preview": "node preview.mjs",
-    "test:daily-summary-ui": "node daily-summary-ui-test.mjs"
+    "test:daily-summary-ui": "node daily-summary-ui-test.mjs",
+    "test:card-axis-ui": "node card-axis-ui-test.mjs"
   }
 }

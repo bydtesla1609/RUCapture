@@ -121,7 +121,7 @@ try {
   await page.waitForFunction(()=>!document.querySelector('.checklist[data-busy]'));assert.equal(requests,2);
   await page.reload();await page.locator('#workspace').waitFor();await page.waitForFunction(()=>messageReady);if(await page.locator('#messages-dialog').isVisible())await page.locator('#messages-read').click();await category(page,'作业').click();
   assert.equal(await page.getByRole('checkbox',{name:'完成：阅读一章',exact:true}).isChecked(),true);assert.equal(await page.getByRole('checkbox',{name:'完成：记下疑问',exact:true}).isChecked(),true);
-  await page.locator('.task-footer-main .select-trigger').click();await page.getByRole('option',{name:'进行中',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('article[data-busy]'));assert.equal(await page.locator('.task-status').inputValue(),'doing');
+  await page.locator('.task-status').locator('..').locator('.select-trigger').click();await page.getByRole('option',{name:'进行中',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('article[data-busy]'));assert.equal(await page.locator('.task-status').inputValue(),'doing');
   await category(page,'总览').click();await page.evaluate(()=>calendarSelect('2026-10-08'));assert.equal(await page.locator('.day-list .task-title').textContent(),'摄影课');
   const counts=await page.locator('.summary strong').allTextContents();assert.equal(counts[0],'1');
   for(const width of [390,320,768]){
