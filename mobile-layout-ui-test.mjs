@@ -53,6 +53,36 @@ try{
   await page.setViewportSize({width:390,height:844});
   const nav=page.locator('#mobile-nav-toggle');
   async function openNav(){if(await nav.getAttribute('aria-expanded')!=='true')await nav.tap();}
+  // Native Android-style touch dispatch in Chromium; TouchEvents exercise the same guards in WebKit.
+  const touchSession=engine===engines.chromium?await context.newCDPSession(page):null;
+  async function swipe(from,to,{cancel=false,target='main'}={}){
+    if(touchSession && target==='main'){
+      await touchSession.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:from[0],y:from[1]}]});
+      for(let i=1;i<=6;i++){await touchSession.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:from[0]+(to[0]-from[0])*i/6,y:from[1]+(to[1]-from[1])*i/6}]});await page.waitForTimeout(16);}
+      if(Math.abs(to[1]-from[1])>Math.abs(to[0]-from[0])){await page.waitForTimeout(200);await touchSession.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:to[0],y:to[1]}]});}
+      await touchSession.send('Input.dispatchTouchEvent',{type:cancel?'touchCancel':'touchEnd',touchPoints:[]});
+    }else await page.evaluate(({from,to,cancel,target})=>{
+      const node=document.querySelector(target),send=(type,x,y)=>{const touch={identifier:1,target:node,clientX:x,clientY:y},event=new Event(type,{bubbles:true,cancelable:true});Object.defineProperties(event,{touches:{value:['touchend','touchcancel'].includes(type)?[]:[touch]},changedTouches:{value:[touch]}});node.dispatchEvent(event);};
+      send('touchstart',...from);for(let i=1;i<=6;i++)send('touchmove',from[0]+(to[0]-from[0])*i/6,from[1]+(to[1]-from[1])*i/6);send(cancel?'touchcancel':'touchend',...to);
+    },{from,to,cancel,target});
+  }
+  const rest=await nav.boundingBox();assert.ok(await nav.evaluate(n=>Number(getComputedStyle(n).backgroundColor.match(/[\d.]+/g).at(-1))<.1),'navigation button uses a transparent surface');
+  await swipe([40,280],[180,282]);assert.equal(await nav.getAttribute('aria-expanded'),'true','right swipe opens');
+  let navBox=await nav.boundingBox(),mainBox=await page.locator('main').boundingBox(),drawerBox=await page.locator('#sidebar').boundingBox();
+  assert.ok(Math.abs(navBox.x-rest.x-mainBox.x)<1 && Math.abs(mainBox.x-drawerBox.width)<1,'toggle and page move together by the drawer width');
+  assert.ok(navBox.x+navBox.width<=390,'open toggle stays on screen');
+  await swipe([375,280],[255,282]);assert.equal(await nav.getAttribute('aria-expanded'),'false','left swipe closes from the visible page');
+  await swipe([40,280],[64,281]);assert.equal(await nav.getAttribute('aria-expanded'),'false','small accidental movements snap closed');
+  await swipe([40,280],[180,281],{cancel:true});assert.equal(await nav.getAttribute('aria-expanded'),'false','cancel restores previous state');
+  await swipe([80,330],[82,220]);assert.equal(await nav.getAttribute('aria-expanded'),'false','vertical scrolling does not open navigation');
+  await page.evaluate(()=>scrollTo(0,0));await page.locator('[data-view=axes]').tap();
+  await page.locator('.axes-canvas svg').waitFor();await swipe([90,340],[220,341],{target:'.axes-canvas svg'});assert.equal(await nav.getAttribute('aria-expanded'),'false','axis panning retains its gesture');
+  await page.locator('[data-view=calendar]').tap();
+  await page.emulateMedia({reducedMotion:'no-preference'});await nav.tap();
+  const motion=await page.evaluate(async()=>{const values=[];for(let i=0;i<42;i++){await new Promise(requestAnimationFrame);values.push({main:main.getBoundingClientRect().x,button:mobileToggle.getBoundingClientRect().x});}return {values,width:sidebar.getBoundingClientRect().width};});
+  assert.ok(motion.values.some(value=>value.main>motion.width+.2),'spring transition has a restrained overshoot');
+  assert.ok(motion.values.every(value=>Math.abs(value.button-rest.x-value.main)<1),'button remains aligned throughout animation');
+  await nav.tap();await page.waitForTimeout(600);await page.emulateMedia({reducedMotion:'reduce'});
   const fits=async()=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'page must not scroll horizontally');
   const clickable=async locator=>{await locator.scrollIntoViewIfNeeded();assert.ok(await locator.evaluate(node=>{const r=node.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return hit===node||node.contains(hit);}));};
   await mkdir('data/screenshots/mobile-layout',{recursive:true});
@@ -77,7 +107,7 @@ try{
     await openNav();await page.locator('#user-menu-toggle').tap();await page.locator('#effects-toggle').tap();assert.equal(await nav.getAttribute('aria-expanded'),'true');
     await page.locator('#archive-button').tap();await page.locator('#archive-dialog').waitFor({state:'visible'});assert.equal(await nav.getAttribute('aria-expanded'),'false');await page.locator('#archive-dialog .close-dialog').tap();
     await openNav();await page.keyboard.press('Escape');assert.equal(await nav.getAttribute('aria-expanded'),'false');
-    await openNav();await page.locator('#mobile-nav-backdrop').tap({position:{x:width-8,y:300}});assert.equal(await nav.getAttribute('aria-expanded'),'false');
+    await openNav();await page.touchscreen.tap(width-8,Math.min(300,height-20));assert.equal(await nav.getAttribute('aria-expanded'),'false');
   }
   await page.setViewportSize({width:390,height:844});await openNav();await page.locator('#demo-button').tap();
   for(let step=0;step<11;step++){
@@ -88,7 +118,7 @@ try{
   await page.locator('#demo-dialog').waitFor({state:'hidden'});assert.equal(await nav.getAttribute('aria-expanded'),'false');
   await page.setViewportSize({width:1440,height:1050});await page.waitForFunction(()=>!mobileNavigation.matches && !document.getElementById('sidebar').inert);assert.equal(await nav.isVisible(),false);assert.equal(await page.locator('#workspace').evaluate(n=>n.classList.contains('sidebar-collapsed')),true);
   await page.locator('#sidebar-toggle').click();assert.equal(await page.locator('#workspace').evaluate(n=>n.classList.contains('sidebar-collapsed')),false);
-  assert.deepEqual(errors,[]);console.log(`Mobile layout passed (${engine.name()}): touch axis selection/create/save, drawer and focus, account menu, calendar filtering/navigation, tour, 320–1440px, effects on/off.`);
+  assert.deepEqual(errors,[]);console.log(`Mobile layout passed (${engine.name()}): transparent moving toggle, swipe/cancel/vertical scroll, synchronized spring motion, axis selection/create/save, drawer and focus, account menu, calendar filtering/navigation, tour, 320–1440px, effects on/off.`);
 }finally{
   await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));database.close();
   assert.ok(resolve(directory).startsWith(resolve(tmpdir())+'\\'));await rm(directory,{recursive:true,force:true});

@@ -209,6 +209,39 @@ function mobileSidebar(open,restoreFocus=false){
 mobileSidebar(false);mobileNavigation.addEventListener("change",()=>mobileSidebar(false));
 mobileToggle.onclick=()=>mobileSidebar(!workspace.classList.contains("mobile-nav-open"));
 $("mobile-nav-backdrop").onclick=()=>mobileSidebar(false,true);
+// Follow horizontal touch gestures without taking vertical scroll, form editing or canvas drags.
+let navGesture=null,navIgnoreClickUntil=0;
+function finishNavGesture(cancelled=false){
+  const gesture=navGesture;navGesture=null;if(!gesture?.dragging)return;
+  workspace.classList.remove("mobile-nav-dragging");workspace.style.removeProperty("--mobile-nav-offset");workspace.style.removeProperty("--mobile-nav-progress");
+  navIgnoreClickUntil=performance.now()+450;
+  mobileSidebar(cancelled || Math.abs(gesture.dx)<48?gesture.open:gesture.dx>0);
+}
+workspace.addEventListener("touchstart",event=>{
+  navIgnoreClickUntil=0;
+  if(event.touches.length!==1){finishNavGesture(true);navGesture=null;return;}
+  if(!mobileNavigation.matches || workspace.hidden || document.querySelector("dialog[open],:popover-open"))return;
+  if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.axes-canvas,.quadrant-viewport,.planning-handle,.drag-handle,.clock-value'))return;
+  for(let node=event.target;node && node!==workspace;node=node.parentElement)if(node.scrollWidth>node.clientWidth+2 && /auto|scroll/.test(getComputedStyle(node).overflowX))return;
+  const point=event.touches[0];
+  navGesture={x:point.clientX,y:point.clientY,dx:0,open:workspace.classList.contains("mobile-nav-open"),width:sidebar.getBoundingClientRect().width,offset:new DOMMatrixReadOnly(getComputedStyle(main).transform).m41,dragging:false};
+},{passive:true});
+workspace.addEventListener("touchmove",event=>{
+  if(!navGesture || event.touches.length!==1)return;
+  const gesture=navGesture,point=event.touches[0],dx=point.clientX-gesture.x,dy=point.clientY-gesture.y;
+  if(!gesture.dragging){
+    if(Math.abs(dy)>12 && Math.abs(dy)>Math.abs(dx)){navGesture=null;return;}
+    if(Math.abs(dx)<12 || Math.abs(dx)<Math.abs(dy)*1.3 || !gesture.open && dx<0 || gesture.open && dx>0)return;
+    gesture.dragging=true;workspace.classList.add("mobile-nav-dragging");
+  }
+  event.preventDefault();gesture.dx=dx;
+  const offset=Math.max(0,Math.min(gesture.width,gesture.offset+dx));
+  workspace.style.setProperty("--mobile-nav-offset",`${offset}px`);workspace.style.setProperty("--mobile-nav-progress",String(offset/gesture.width));
+},{passive:false});
+workspace.addEventListener("touchend",()=>finishNavGesture(),{passive:true});
+workspace.addEventListener("touchcancel",()=>finishNavGesture(true),{passive:true});
+workspace.addEventListener("click",event=>{if(event.detail && performance.now()<navIgnoreClickUntil){event.preventDefault();event.stopImmediatePropagation();}},{capture:true});
+window.addEventListener("resize",()=>{finishNavGesture(true);navGesture=null;});
 sidebar.addEventListener("click",event=>{
   const button=event.target.closest("button");if(!mobileNavigation.matches || !button || button.id==="user-menu-toggle" || button.id==="demo-button")return;
   mobileSidebar(false);
