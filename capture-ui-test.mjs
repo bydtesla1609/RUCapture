@@ -127,7 +127,7 @@ try {
   for(const width of [390,320,768]){
     await page.setViewportSize({width,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`overflow ${width}`);
     await page.locator('[data-view="axes"]').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`axes overflow ${width}`);
-    await page.locator('#sidebar-toggle').click();await page.waitForTimeout(300);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`collapsed overflow ${width}`);await page.locator('#sidebar-toggle').click();
+    await page.locator('#mobile-nav-toggle').click();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`drawer overflow ${width}`);await page.locator('#mobile-nav-toggle').click();
     await page.locator('[data-view="calendar"]').click();
   }
   await page.setViewportSize({width:390,height:844});await page.locator('[data-view="axes"]').click();await page.screenshot({path:'data/screenshots/capture-mobile.png',animations:'disabled',fullPage:true});

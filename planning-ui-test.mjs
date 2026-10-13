@@ -208,10 +208,10 @@ try{
     await page.setViewportSize({width,height:900});await page.locator('[data-view=quadrants]').click();
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`no page overflow at ${width}`);await directionLabels();
     const source=page.locator('.planning-list .planning-card').first();await source.scrollIntoViewIfNeeded();await drag(source,.75,.25);await page.mouse.up();await idle();
-    await page.locator('#focus-button').click();await page.locator('#focus-settings').waitFor({state:'visible'});await page.locator('#focus-edit-info').click();await page.locator('#task-title').fill('小屏专注');assert.ok(await page.evaluate(()=>document.getElementById('task-dialog').scrollWidth<=document.getElementById('task-dialog').clientWidth));
-    const idleBounds=await page.locator('#focus-button').boundingBox();
+    await page.locator('#mobile-nav-toggle').click();await page.locator('#focus-button').click();await page.locator('#focus-settings').waitFor({state:'visible'});await page.locator('#focus-edit-info').click();await page.locator('#task-title').fill('小屏专注');assert.ok(await page.evaluate(()=>document.getElementById('task-dialog').scrollWidth<=document.getElementById('task-dialog').clientWidth));
+    const idleBounds=await page.locator('#mobile-nav-toggle').boundingBox();
     await page.locator('#focus-toggle').click();await page.waitForFunction(()=>!focusActionBusy && activeFocus()?.state==='running');
-    const runningBounds=await page.locator('#focus-button').boundingBox();assert.equal(runningBounds.height,idleBounds.height);assert.equal(runningBounds.y,idleBounds.y);
+    const runningBounds=await page.locator('#mobile-nav-toggle').boundingBox();assert.equal(runningBounds.height,idleBounds.height);assert.equal(runningBounds.y,idleBounds.y);
     const fits=await page.locator('#focus-button').evaluate(el=>[...el.querySelectorAll('span')].every(span=>span.scrollWidth<=span.clientWidth));assert.ok(fits,`focus label and countdown fit at ${width}`);
     assert.ok(await page.locator('#task-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth),`running clock controls fit at ${width}`);
     if(width===390)await page.screenshot({path:'data/screenshots/focus-mobile.png',fullPage:true});

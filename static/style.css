@@ -442,3 +442,60 @@ html{transition:opacity .22s ease}html.effects-fading{opacity:.45}
 /* Each chapter ends with the question answered by the next one. */
 .launch-next{max-width:100%;font-size:clamp(12px,1.05vw,14px);line-height:1.8;color:#a9b4cf;gap:12px;text-align:center}
 .launch-next>span{flex:none}
+
+/* Pickers live above scrollable dialogs, while retaining their native form control. */
+.select-menu[popover]{position:fixed;inset:auto;margin:0;min-width:0;max-width:calc(100vw - 16px);overscroll-behavior:contain}
+.select-menu[popover]:not(:popover-open){display:none}
+.calendar-toolbar{flex-wrap:wrap}
+.calendar-heading{flex:1 1 240px;justify-content:space-between}
+.calendar-controls{flex:none}
+.calendar-controls button{min-height:44px}
+.mobile-nav-toggle,.mobile-nav-backdrop{display:none}
+
+@media(max-width:900px){
+  .workspace,.workspace.sidebar-collapsed{display:block}
+  .mobile-nav-toggle{display:grid;place-items:center;position:fixed;z-index:42;top:calc(env(safe-area-inset-top) + 30px);left:max(24px,env(safe-area-inset-left));width:44px;height:44px;border:1px solid #abb9ed3b;border-radius:14px;background:#242b43ed;color:#dce5ff;box-shadow:0 5px 20px #080c2540;backdrop-filter:blur(14px)}
+  .mobile-nav-toggle svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+  .mobile-nav-toggle[aria-expanded=true]{background:#343a58;border-color:#b8afff80}
+  .mobile-nav-backdrop{display:block;position:fixed;inset:0;z-index:40;background:#060b1a85;opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;touch-action:none}
+  #workspace>.sidebar{position:fixed;inset:0 auto 0 0;z-index:41;width:min(320px,88vw);height:100dvh;box-sizing:border-box;display:flex;flex-direction:column;padding:calc(env(safe-area-inset-top) + 22px) 16px max(20px,env(safe-area-inset-bottom));border-right:1px solid #9eafff2e;border-bottom:0;overflow-y:auto;overscroll-behavior:contain;transform:translateX(-105%);visibility:hidden;transition:transform .3s cubic-bezier(.2,.75,.25,1),visibility .3s;box-shadow:12px 0 50px #05081840}
+  #workspace.mobile-nav-open>.sidebar{transform:translateX(0);visibility:visible}
+  .mobile-nav-open .mobile-nav-backdrop{opacity:1;visibility:visible}
+  html.mobile-nav-open,html.mobile-nav-open body{overflow:hidden;overscroll-behavior:none}
+  #workspace .sidebar-toggle{display:none}
+  #workspace .brand-row{position:sticky;top:0;z-index:1;padding-left:60px;height:64px;min-height:64px;background:var(--sidebar)}
+  #workspace .brand-copy{max-width:170px;opacity:1;display:block}
+  #workspace .brand{gap:8px}
+  #workspace .brand-icon{display:none}
+  #workspace .wordmark{font-size:25px}
+  #workspace #categories{display:flex;flex-direction:column;overflow:visible;gap:4px;padding:18px 0;margin:12px 0 0}
+  #workspace .sidebar .nav-button{width:100%;height:48px;min-height:48px;justify-content:flex-start;gap:13px;padding:10px 14px;margin:0;font-size:16px;border:0;border-radius:10px;background:transparent}
+  #workspace .sidebar .nav-button.active{background:#a79bff20;box-shadow:inset 2px 0 var(--accent)}
+  #workspace .sidebar .nav-button span{max-width:200px;opacity:1;display:inline;font-size:inherit;white-space:nowrap}
+  #workspace .sidebar .nav-button .count{margin-left:auto;font-size:13px}
+  #workspace .sidebar-bottom{position:static;display:flex;flex-direction:column;gap:4px;margin-top:auto;padding-top:20px}
+  #workspace .user-card{width:100%;justify-content:flex-start;gap:10px;padding:8px 11px;min-height:56px;flex:none;margin-top:8px;border-top:1px solid var(--border)}
+  #workspace .user-identity,#workspace .user-chevron{max-width:180px;opacity:1;overflow:visible}
+  #workspace .user-chevron{margin-left:auto}
+  #workspace .user-unread{position:static}
+  #workspace>main{min-width:0;padding:calc(env(safe-area-inset-top) + 14px) max(16px,env(safe-area-inset-right)) 36px max(16px,env(safe-area-inset-left))}
+  #workspace>main>.heading{padding:18px 12px 18px 64px;min-height:92px;box-sizing:border-box;gap:8px;margin:0 0 20px}
+  #workspace .heading h1{font-size:clamp(1.5rem,5.8vw,1.9rem);white-space:nowrap}
+  #workspace .heading .primary{padding:10px;font-size:14px;min-height:44px;white-space:nowrap}
+  .calendar-filter>summary,.calendar-filter-menu label{min-height:44px;font-size:14px}
+  .calendar-filter-menu{width:180px}
+  .overview-views{gap:4px}
+  .overview-views button{min-height:44px;flex:1;padding:8px 10px}
+  .select-option{min-height:44px;font-size:16px}
+  .user-menu{max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain}
+}
+@media(max-width:600px){
+  .calendar-heading{flex-basis:100%;gap:8px}
+  .calendar-toolbar{gap:8px;padding:12px}
+  .calendar-controls{margin-left:auto;gap:6px}
+  .calendar-filter-menu{left:auto;right:0}
+  .axes-toolbar{align-items:flex-start;gap:8px;flex-wrap:wrap}
+  .axes-toolbar-actions{margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+  .task-footer-main{flex-wrap:wrap}
+}
+@media(prefers-reduced-motion:reduce){#workspace>.sidebar,.mobile-nav-backdrop{transition:none}}

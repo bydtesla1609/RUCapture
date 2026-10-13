@@ -59,7 +59,7 @@ try {
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth && document.getElementById("messages-dialog").scrollWidth<=document.getElementById("messages-dialog").clientWidth),true);
   await page.locator("#messages-read").click();await page.evaluate(()=>checkCloud());
   assert.equal(await page.locator("#messages-dialog").isVisible(),false,"one automatic popup per opening");
-  await page.locator("#sources-button").click();
+  if(await page.locator('#mobile-nav-toggle').isVisible())await page.locator('#mobile-nav-toggle').click();await page.locator("#sources-button").click();
   await page.locator("#sync-existing").click();
   await page.locator("#sources-list .source-login").waitFor({state:"visible"});
   assert.equal(await page.locator("#sources-list .source-login").count(),1);
@@ -137,14 +137,15 @@ try {
   const mobile = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true, deviceScaleFactor: 2});
   await mobile.addInitScript(()=>localStorage.setItem("ruchecklist-demo:personal","seen"));
   const phone = await mobile.newPage(); phone.on("pageerror", error => errors.push(error.message));
-  await login(phone); await category(phone, "活动").click();
+  await login(phone);await phone.locator('#mobile-nav-toggle').click();await category(phone, "活动").click();
   assert.equal(await phone.locator(".brand-icon img").count(),1);
   const alignment=await phone.locator(".brand .brand-icon").evaluate(icon=>{const box=icon.getBoundingClientRect(),svg=icon.querySelector("img").getBoundingClientRect();return Math.abs(box.top+box.height/2-svg.top-svg.height/2)<1 && Math.abs(box.left+box.width/2-svg.left-svg.width/2)<1;});assert.equal(alignment,true);
   assert.deepEqual(await (await mobile.request.get(origin+fileURL)).body(),png);
   assert.ok(await phone.getByRole("link",{name:"课程参考资料 ↗"}).isVisible());
   const mobileCard = phone.locator("article.task").first();
   assert.deepEqual(await mobileCard.locator(".todo-text").allTextContents(), ["读论文并标注", "整理笔记"]);
-  await mobileCard.scrollIntoViewIfNeeded();
+  await phone.locator('#board').evaluate(async node=>{await Promise.allSettled(node.getAnimations().map(animation=>animation.finished));});
+  await mobileCard.locator('.todo-list').evaluate(node=>node.scrollIntoView({block:'center'}));
   const touch = await mobile.newCDPSession(phone);
   await saved(phone, async () => {
     const a = await mobileCard.locator(".drag-handle").first().boundingBox(), b = await mobileCard.locator(".todo-row").last().boundingBox();
@@ -285,7 +286,7 @@ try {
   assert.equal(await page.locator('#status').inputValue(),'doing');assert.equal(database.prepare('SELECT status FROM tasks WHERE id=?').get(homeworkId).status,'todo');await page.locator('#task-dialog .close-dialog').first().click();
   await mkdir("data/screenshots", {recursive: true});
   await page.screenshot({animations:"disabled",path:"data/screenshots/desktop.png",fullPage:true});
-  await phone.evaluate(() => refresh()); await category(phone, "总览").click();
+  await phone.evaluate(() => refresh());await phone.locator('#mobile-nav-toggle').click();await category(phone, "总览").click();
   await phone.evaluate(()=>{calendarMonth="2026-10";selectedDay="2026-10-02";renderCalendar();scrollTo(0,0);});
   await phone.evaluate(()=>Promise.all(document.getAnimations().map(a=>a.finished.catch(()=>{}))));
   await phone.locator("[data-date='2026-10-08']").scrollIntoViewIfNeeded();
@@ -365,10 +366,10 @@ try {
   await page.screenshot({animations:"disabled",path:"data/screenshots/exams.png",fullPage:true});
   await phone.evaluate(()=>refresh());
   for(const section of ["记录","考试","会议","活动"]) {
-    await category(phone,section).click();
+    await phone.locator('#mobile-nav-toggle').click();await category(phone,section).click();
     for(const width of [320,375,430,768]) {await phone.setViewportSize({width,height:844});assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${section} overflow at ${width}px`);}
   }
-  await phone.setViewportSize({width:390,height:844});await category(phone,"记录").click();await phone.screenshot({animations:"disabled",path:"data/screenshots/courses-mobile.png",fullPage:true});
+  await phone.setViewportSize({width:390,height:844});await phone.locator('#mobile-nav-toggle').click();await category(phone,"记录").click();await phone.screenshot({animations:"disabled",path:"data/screenshots/courses-mobile.png",fullPage:true});
   assert.deepEqual(errors, []);
   console.log("PASS: login-expiry popup on opening, one combined startup reminder, shared relogin links, verified recovery, Beijing monthly calendar, date selection, month/keyboard navigation, ranges, undated tasks, direct status and conflict handling, downloadable extension, unified cloud/local sync, completion order, archive filter/detail/delete, simulated board-to-extension controls, category inheritance, required title, location, detail/card todo CRUD, mouse/touch/keyboard sorting, two browser sessions, conflict draft retention, 320–768px layouts, course import and calendar display, course editing without status, logo alignment, attachment upload/preview/download and shared links. Screenshots: data/screenshots/ (synthetic data only).");
 } finally {

@@ -96,6 +96,7 @@ async function api(path, method="GET", payload, timeout=45000) {
   }
 }
 function showLogin() {
+  if(typeof mobileSidebar==="function")mobileSidebar(false);
   if(typeof resetDailySummary==="function")resetDailySummary();
   if(typeof resetPlanning==="function")resetPlanning();
   refreshSequence++;syncRevision=null;lastFullSync=0;closeUserMenu();
@@ -1209,6 +1210,7 @@ function layoutDemo(reveal=false){
 }
 function showDemoStep() {
   const step=demoSteps[demoIndex];
+  mobileSidebar(!!document.querySelector(step.target)?.closest(".sidebar"));
   $("demo-title").textContent=step.title;$("demo-description").textContent=step.text;$("demo-progress").textContent=`${demoIndex+1} / ${demoSteps.length}`;
   $("demo-prev").disabled=demoIndex===0;$("demo-next").disabled=false;$("demo-next").textContent=demoIndex===demoSteps.length-1?"开始使用":"下一步";
   if(step.sources) {
@@ -1228,12 +1230,13 @@ function startDemo() {
   loadSourceLinks();checkCloud();checkCollector();
 }
 function endDemo() {
+  mobileSidebar(false);
   try{localStorage.setItem(demoKey(),"seen");}catch{}
   $("demo-dialog").close();$("sources-dialog").close();
   $("sources-dialog").classList.remove("demo-preview");cancelAnimationFrame(demoFrame);demoFrame=0;demoReveal=false;
   loadSyncProgress();
   if(demoOriginal){categoryFilter=demoOriginal.category;overviewView=demoOriginal.view;render();window.scrollTo({top:demoOriginal.scroll,behavior:"instant"});demoOriginal=null;}
-  $("demo-button").focus({preventScroll:true});
+  (mobileNavigation.matches?$("mobile-nav-toggle"):$("demo-button")).focus({preventScroll:true});
 }
 function maybeDemo() {if(typeof maybeMessageBoard==="function")maybeMessageBoard();let seen=false;try{seen=localStorage.getItem(demoKey())==="seen";}catch{}if(!seen&&!document.querySelector("dialog[open]")&&!$("workspace").hidden)startDemo();}
 $("demo-button").onclick=startDemo;$("demo-skip").onclick=endDemo;

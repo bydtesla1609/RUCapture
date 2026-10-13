@@ -73,7 +73,9 @@
   <nav class="launch-pager" aria-label="切换介绍页"><span id="launch-page-number" aria-hidden="true">01 / 04</span><button type="button" data-launch-to="0" aria-label="第 1 页：汇总作业" aria-current="step"></button><button type="button" data-launch-to="1" aria-label="第 2 页：校园日历"></button><button type="button" data-launch-to="2" aria-label="第 3 页：目标轴线"></button><button type="button" data-launch-to="3" aria-label="第 4 页：规划专注"></button></nav>
 </section>
 <div id="workspace" class="workspace" hidden>
-  <aside class="sidebar">
+  <button id="mobile-nav-toggle" class="mobile-nav-toggle" type="button" aria-label="展开导航" aria-expanded="false" aria-controls="sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h11M4 17h7"/></svg></button>
+  <div id="mobile-nav-backdrop" class="mobile-nav-backdrop" aria-hidden="true"></div>
+  <aside id="sidebar" class="sidebar" aria-label="主导航">
     <div class="brand-row"><a class="brand" href="/" aria-label="RUCapture首页"><span class="brand-icon" aria-hidden="true"><img src="/static/icon.svg" alt="" width="56" height="56"></span><span class="brand-copy"><span class="wordmark"><b>RU</b>Capture</span><small id="app-version">v3.1.5</small></span></a><button id="sidebar-toggle" class="sidebar-toggle" aria-label="收起侧栏" aria-expanded="true" title="收起侧栏"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4"/><path class="sidebar-divider" d="M12 4v16"/></svg></button></div>
     <nav id="categories" aria-label="校园板块"></nav>
     <div class="sidebar-bottom">

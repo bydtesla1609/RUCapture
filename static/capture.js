@@ -162,10 +162,14 @@ function renderAxes(){
 }
 
 // Native select remains the form control; its visible picker shares the app theme.
+let placeOpenSelect=null;
+window.addEventListener("resize",()=>placeOpenSelect?.());
+document.addEventListener("scroll",event=>{if(!event.target.closest?.(".select-menu"))placeOpenSelect?.();},true);
+window.visualViewport?.addEventListener("resize",()=>placeOpenSelect?.());
 function enhanceSelect(select){
   if(select.dataset.enhanced){select.dispatchEvent(new Event("capture-refresh"));return;}
   select.dataset.enhanced="true";select.classList.add("custom-select-native");select.tabIndex=-1;select.setAttribute("aria-hidden","true");
-  const wrap=element("div",null,"custom-select"),button=element("button",null,"select-trigger"),menu=element("div",null,"select-menu");button.type="button";button.setAttribute("aria-haspopup","listbox");button.setAttribute("aria-expanded","false");menu.hidden=true;menu.setAttribute("role","listbox");
+  const wrap=element("div",null,"custom-select"),button=element("button",null,"select-trigger"),menu=element("div",null,"select-menu");button.type="button";button.setAttribute("aria-haspopup","listbox");button.setAttribute("aria-expanded","false");menu.popover="auto";menu.setAttribute("role","listbox");
   select.before(wrap);wrap.append(select,button,menu);
   const label=()=>select.getAttribute("aria-label") || document.querySelector(`label[for="${select.id}"]`)?.textContent.trim() || "选择";
   const sync=()=>{const arrow=element("span",null,"select-arrow");arrow.setAttribute("aria-hidden","true");button.replaceChildren(element("span",select.selectedOptions[0]?.textContent || "请选择","select-value"),arrow);button.disabled=select.disabled;button.setAttribute("aria-label",label());menu.replaceChildren(...[...select.options].map(option=>{
@@ -174,20 +178,50 @@ function enhanceSelect(select){
     if(action)entry.setAttribute("aria-haspopup","dialog");
     entry.onclick=()=>{close();button.focus();if(action){createAxisFromCard();return;}select.value=option.value;select.dispatchEvent(new Event("change",{bubbles:true}));sync();};return entry;
   }));};
-  const close=()=>{menu.hidden=true;button.setAttribute("aria-expanded","false");};
+  const close=()=>{if(menu.matches(":popover-open"))menu.hidePopover();button.setAttribute("aria-expanded","false");if(placeOpenSelect===placeMenu)placeOpenSelect=null;};
   const placeMenu=()=>{
-    const rect=button.getBoundingClientRect(),dialog=select.closest("dialog")?.getBoundingClientRect();
-    const above=rect.top-Math.max(8,dialog?.top || 0)-8,below=Math.min(innerHeight-8,dialog?.bottom || innerHeight)-rect.bottom-8;
+    if(!menu.matches(":popover-open"))return;
+    const rect=button.getBoundingClientRect(),view=window.visualViewport,top=(view?.offsetTop || 0)+8,bottom=(view?.offsetTop || 0)+(view?.height || innerHeight)-8;
+    if(rect.bottom<top || rect.top>bottom){close();return;}
+    const above=rect.top-top-6,below=bottom-rect.bottom-6;
     const up=below<Math.min(menu.scrollHeight,260) && above>below;
-    menu.classList.toggle("select-menu-above",up);menu.style.maxHeight=`${Math.max(44,Math.min(260,up?above:below))}px`;
+    menu.style.width=`${Math.min(rect.width,innerWidth-16)}px`;menu.style.maxHeight=`${Math.max(44,Math.min(260,up?above:below))}px`;
+    menu.style.left=`${Math.max(8,Math.min(rect.left,innerWidth-menu.offsetWidth-8))}px`;menu.style.top=`${Math.max(top,up?rect.top-menu.offsetHeight-6:rect.bottom+6)}px`;
   };
-  button.onclick=()=>{const open=menu.hidden;document.querySelectorAll(".select-menu").forEach(node=>{node.hidden=true;node.parentElement.querySelector(".select-trigger").setAttribute("aria-expanded","false");});menu.hidden=!open;button.setAttribute("aria-expanded",String(open));if(open){sync();placeMenu();menu.querySelector('[aria-selected="true"]')?.focus({preventScroll:true});}};
-  wrap.onkeydown=event=>{if(event.key==="Escape"){event.preventDefault();event.stopPropagation();close();button.focus();}if(["ArrowDown","ArrowUp","Home","End"].includes(event.key)){event.preventDefault();menu.hidden=false;button.setAttribute("aria-expanded","true");placeMenu();const choices=[...menu.querySelectorAll("button:not(:disabled)")],index=choices.indexOf(document.activeElement);choices[event.key==="Home"?0:event.key==="End"?choices.length-1:Math.max(0,Math.min(choices.length-1,index+(event.key==="ArrowDown"?1:-1)))]?.focus();}};
-  wrap.addEventListener("focusout",event=>{if(!wrap.contains(event.relatedTarget))close();});select.addEventListener("change",sync);select.addEventListener("capture-refresh",sync);sync();
+  const open=()=>{sync();menu.showPopover();button.setAttribute("aria-expanded","true");placeOpenSelect=placeMenu;placeMenu();};
+  menu.addEventListener("beforetoggle",event=>{button.setAttribute("aria-expanded",String(event.newState==="open"));if(event.newState==="closed" && placeOpenSelect===placeMenu)placeOpenSelect=null;});
+  button.onclick=()=>{if(menu.matches(":popover-open"))close();else{open();menu.querySelector('[aria-selected="true"]')?.focus({preventScroll:true});}};
+  wrap.onkeydown=event=>{if(event.key==="Escape" && menu.matches(":popover-open")){event.preventDefault();event.stopPropagation();close();button.focus();}if(["ArrowDown","ArrowUp","Home","End"].includes(event.key)){event.preventDefault();if(!menu.matches(":popover-open"))open();const choices=[...menu.querySelectorAll("button:not(:disabled)")],index=choices.indexOf(document.activeElement);choices[event.key==="Home"?0:event.key==="End"?choices.length-1:Math.max(0,Math.min(choices.length-1,index+(event.key==="ArrowDown"?1:-1)))]?.focus();}};
+  // Safari taps move focus to the dialog before click. Let popover light-dismiss handle taps outside.
+  wrap.addEventListener("keydown",event=>{if(event.key==="Tab")requestAnimationFrame(()=>{if(!wrap.contains(document.activeElement))close();});});select.addEventListener("change",sync);select.addEventListener("capture-refresh",sync);sync();
 }
-document.addEventListener("click",event=>{document.querySelectorAll(".custom-select").forEach(wrap=>{if(!event.composedPath().includes(wrap)){wrap.querySelector(".select-menu").hidden=true;wrap.querySelector(".select-trigger").setAttribute("aria-expanded","false");}});});
 const toggle=$("sidebar-toggle"),workspace=$("workspace");
 function sidebarState(collapsed){workspace.classList.toggle("sidebar-collapsed",collapsed);toggle.setAttribute("aria-expanded",String(!collapsed));toggle.title=collapsed?"展开侧栏":"收起侧栏";toggle.setAttribute("aria-label",toggle.title);}
 sidebarState(localStorage.getItem("rucapture-sidebar")==="collapsed");toggle.onclick=()=>{const collapsed=!workspace.classList.contains("sidebar-collapsed");sidebarState(collapsed);localStorage.setItem("rucapture-sidebar",collapsed?"collapsed":"expanded");closeUserMenu();};
+
+const mobileNavigation=matchMedia("(max-width:900px)"),mobileToggle=$("mobile-nav-toggle"),sidebar=$("sidebar"),main=workspace.querySelector("main");
+function mobileSidebar(open,restoreFocus=false){
+  open=mobileNavigation.matches && open;workspace.classList.toggle("mobile-nav-open",open);document.documentElement.classList.toggle("mobile-nav-open",open);
+  sidebar.inert=mobileNavigation.matches && !open;main.inert=open;
+  mobileToggle.setAttribute("aria-expanded",String(open));mobileToggle.setAttribute("aria-label",open?"收起导航":"展开导航");
+  if(!open){closeUserMenu();restoreFocus ||= sidebar.contains(document.activeElement);}if(restoreFocus && mobileNavigation.matches)mobileToggle.focus({preventScroll:true});
+}
+mobileSidebar(false);mobileNavigation.addEventListener("change",()=>mobileSidebar(false));
+mobileToggle.onclick=()=>mobileSidebar(!workspace.classList.contains("mobile-nav-open"));
+$("mobile-nav-backdrop").onclick=()=>mobileSidebar(false,true);
+sidebar.addEventListener("click",event=>{
+  const button=event.target.closest("button");if(!mobileNavigation.matches || !button || button.id==="user-menu-toggle" || button.id==="demo-button")return;
+  mobileSidebar(false);
+  if(button.closest("#categories")){main.querySelector("h1").tabIndex=-1;main.querySelector("h1").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"});}
+});
+$("user-menu").addEventListener("click",event=>{if(event.target.closest("button:not(#effects-toggle)"))mobileSidebar(false);});
+document.addEventListener("keydown",event=>{
+  if(!workspace.classList.contains("mobile-nav-open") || document.querySelector("dialog[open],:popover-open"))return;
+  if(event.key==="Escape"){event.preventDefault();mobileSidebar(false,true);}
+  if(event.key==="Tab"){
+    const choices=[mobileToggle,...sidebar.querySelectorAll("a[href],button:not(:disabled)")].filter(node=>node.getClientRects().length && getComputedStyle(node).visibility!=="hidden"),index=choices.indexOf(document.activeElement);
+    event.preventDefault();choices[(index+(event.shiftKey?-1:1)+choices.length)%choices.length]?.focus();
+  }
+});
 
 document.querySelectorAll("select").forEach(enhanceSelect);
