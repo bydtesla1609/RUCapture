@@ -175,6 +175,8 @@ function enhanceSelect(select){
   select.dataset.enhanced="true";select.classList.add("custom-select-native");select.tabIndex=-1;select.setAttribute("aria-hidden","true");
   const wrap=element("div",null,"custom-select"),button=element("button",null,"select-trigger"),menu=element("div",null,"select-menu");button.type="button";button.setAttribute("aria-haspopup","listbox");button.setAttribute("aria-expanded","false");menu.popover="auto";menu.setAttribute("role","listbox");
   select.before(wrap);wrap.append(select,button,menu);
+  // Associate the trigger so light-dismiss does not close it before the second click.
+  button.popoverTargetElement=menu;
   const label=()=>select.getAttribute("aria-label") || document.querySelector(`label[for="${select.id}"]`)?.textContent.trim() || "选择";
   const sync=()=>{const arrow=element("span",null,"select-arrow"),value=!select.value && select.dataset.emptyLabel || select.selectedOptions[0]?.textContent || "请选择";arrow.setAttribute("aria-hidden","true");button.replaceChildren(element("span",value,"select-value"),arrow);button.title=value;button.disabled=select.disabled;button.setAttribute("aria-label",label());menu.replaceChildren(...[...select.options].map(option=>{
     const action=option.dataset.action==="create-axis",entry=element("button",option.textContent,`select-option${action?" select-create-axis":""}`);
@@ -194,7 +196,7 @@ function enhanceSelect(select){
   };
   const open=()=>{sync();menu.showPopover();button.setAttribute("aria-expanded","true");placeOpenSelect=placeMenu;placeMenu();};
   menu.addEventListener("beforetoggle",event=>{button.setAttribute("aria-expanded",String(event.newState==="open"));if(event.newState==="closed" && placeOpenSelect===placeMenu)placeOpenSelect=null;});
-  button.onclick=()=>{if(menu.matches(":popover-open"))close();else{open();menu.querySelector('[aria-selected="true"]')?.focus({preventScroll:true});}};
+  button.onclick=event=>{event.preventDefault();if(menu.matches(":popover-open"))close();else{open();menu.querySelector('[aria-selected="true"]')?.focus({preventScroll:true});}};
   wrap.onkeydown=event=>{if(event.key==="Escape" && menu.matches(":popover-open")){event.preventDefault();event.stopPropagation();close();button.focus();}if(["ArrowDown","ArrowUp","Home","End"].includes(event.key)){event.preventDefault();if(!menu.matches(":popover-open"))open();const choices=[...menu.querySelectorAll("button:not(:disabled)")],index=choices.indexOf(document.activeElement);choices[event.key==="Home"?0:event.key==="End"?choices.length-1:Math.max(0,Math.min(choices.length-1,index+(event.key==="ArrowDown"?1:-1)))]?.focus();}};
   // Safari taps move focus to the dialog before click. Let popover light-dismiss handle taps outside.
   wrap.addEventListener("keydown",event=>{if(event.key==="Tab")requestAnimationFrame(()=>{if(!wrap.contains(document.activeElement))close();});});select.addEventListener("change",sync);select.addEventListener("capture-refresh",sync);sync();
