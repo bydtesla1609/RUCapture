@@ -43,12 +43,15 @@ test("generic extension requires per-origin permission, preview approval and the
   const call=()=>vm.runInContext("genericMessage(msg,sender)",context);
   await assert.rejects(call,/撤销/);allowed=true;
   const initial=await call();assert.equal(initial.rule,null);
+  context.sender.url='https://class.example/course/list?v=2';assert.equal((await call()).rule,null,'same-origin navigation keeps the preview, with a separate rule');
+  context.sender.url='https://other.example/course/list';await assert.rejects(call,/未配置/);context.sender.url=url;
   const task={external_id:"g:"+"b".repeat(64),title:"Test",source_url:"https://class.example/work/1",stable:true,cookie:"never-upload",html:"never-upload",answers:"never-upload"};
   context.msg={type:"generic-import",binding:initial.binding,rule,tasks:[task],confirmed:false};
   await assert.rejects(call,/预览确认/);assert.equal(posts.length,0);
   context.msg.confirmed=true;await call();assert.equal(posts.length,1);assert.ok(!JSON.stringify(posts).includes("never-upload"));
   for(const saved of Object.values(stored.genericRules))saved.fields=Object.fromEntries(Object.entries(saved.fields).reverse());
   context.msg.confirmed=false;await call();assert.equal(posts.length,1,"unchanged tasks do not upload another heartbeat");
+  context.sender.url='https://class.example/course/list?v=2';await assert.rejects(call,/预览确认/,'another page cannot inherit automatic import permission');context.sender.url=url;
   context.msg.tasks=[{...task,status:'doing'}];await call();assert.equal(posts.at(-1).tasks[0].status,'doing');
   context.msg.tasks=[];context.msg.empty=true;await call();assert.equal(posts.at(-1).task_count,0);assert.deepEqual(posts.at(-1).tasks,[]);
   allowed=false;await assert.rejects(call,/撤销/);allowed=true;

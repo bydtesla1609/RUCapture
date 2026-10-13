@@ -197,6 +197,9 @@ async function cloudPanelAccount(message,sender){
   return {...stored,cloudEnabled:!!configuration.cloud_enabled};
 }
 chrome.runtime.onMessage.addListener((message,sender,reply)=>{
+  if(message.type==='read-site' && sender.tab && sender.frameId===0 && sourceFor(sender.url)){
+    chrome.tabs.sendMessage(sender.tab.id,{type:'read-current'}).then(()=>reply({ok:true})).catch(error=>reply({error:error.message}));return true;
+  }
   if(message.type==="collection-context" && sender.tab) {
     chrome.storage.local.get(["managedTabs","enabled","configuredSources","cloudEnabled","cloudZhifzEnabled","cloudRucListsEnabled"]).then(({managedTabs={},enabled=false,configuredSources=[],cloudEnabled=false,cloudZhifzEnabled=false,cloudRucListsEnabled=false})=>{const source=sourceFor(sender.url);reply({managed:Object.values(managedTabs).includes(sender.tab.id),enabled:enabled && configuredSources.includes(source),cloudEnabled:cloudEnabled && (source!=="zhifz" || cloudZhifzEnabled) && (!["weilai","tuoj"].includes(source) || cloudRucListsEnabled)});});return true;
   }
@@ -220,7 +223,8 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
   if(message.type==="capture" && sender.tab) {
     const current=queue.then(()=>upload(message,sender));
     queue=current.catch(error=>reportError(error,message.source));
-    current.then(reply).catch(error=>reply({error:error.message}));return true;
+    const notify=error=>chrome.tabs.sendMessage(sender.tab.id,{type:'collection-result',source:message.source,count:Array.isArray(message.tasks)?message.tasks.length:0,tasks:(Array.isArray(message.tasks)?message.tasks:[]).slice(0,200).filter(Boolean).map(({title,content,due_at,status})=>({title,content,due_at,status})),error:error || message.error || null},{frameId:0}).catch(()=>{});
+    current.then(result=>{reply(result);if(!result.skipped)notify();}).catch(error=>{reply({error:error.message});notify(error.message);});return true;
   }
   if(message.type==="board-control") {
     boardControl(message,sender).then(reply).catch(error=>reply({error:error.message}));return true;

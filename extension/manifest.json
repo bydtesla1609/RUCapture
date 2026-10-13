@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RUCapture · 校园同步",
-  "version": "1.9.5",
+  "version": "1.9.6",
   "description": "将已登录的教学网站作业、人大课表及考试日程同步至个人看板。",
   "permissions": [
     "storage",
@@ -48,7 +48,7 @@
       ],
       "js": [
         "cloud-routes.js",
-        "parsers.js",
+        "page-parsers.js",
         "capture.js"
       ],
       "run_at": "document_start",
@@ -72,6 +72,7 @@
       "js": [
         "parsers.js",
         "ruc-adapters.js",
+        "source-status.js",
         "content.js"
       ],
       "run_at": "document_start",
@@ -115,8 +116,8 @@
       ],
       "js": [
         "cloud-routes.js",
-        "parsers.js",
-        "ruc-adapters.js",
+        "page-parsers.js",
+        "page-ruc-adapters.js",
         "ruc-capture.js"
       ],
       "run_at": "document_start",

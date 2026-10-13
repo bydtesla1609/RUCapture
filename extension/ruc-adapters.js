@@ -93,8 +93,8 @@ globalThis.RUCLists=(()=>{
         if(!text)continue;
         const state=statusIndex<0?"":cells[statusIndex]?.textContent.trim();
         const status=CampusParsers.progress(state) || (/^(?:已完成|已提交|全部通过|Accepted|AC)$/i.test(state)?"done":/^(?:未完成|未提交|待提交)$/.test(state)?"todo":null);
-        const deadline=dueIndex<0?null:cells[dueIndex]?.textContent.match(/\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?/g)?.at(-1);
-        tasks.push({external_id:target.pathname.match(/\/pno\/(\d+)/)[1],content:text,course,due_at:CampusParsers.date(deadline),...(status?{status}:{}),source_url:target.href});
+        const deadline=dueIndex<0?null:CampusParsers.deadline(cells[dueIndex]?.textContent);
+        tasks.push({external_id:target.pathname.match(/\/pno\/(\d+)/)[1],content:text,course,due_at:deadline,...(status?{status}:{}),source_url:target.href});
       }
     }
     for(const link of doc.querySelectorAll('a[href]')) {

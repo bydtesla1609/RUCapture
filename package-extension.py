@@ -6,6 +6,10 @@ from shutil import copyfile
 
 root = Path(__file__).resolve().parent
 source = root / "extension"
+# Chromium deduplicates manifest script paths across execution worlds. Give the
+# page-world parsers distinct generated paths so both worlds receive their copy.
+for name in ("parsers.js", "ruc-adapters.js"):
+    (source / ("page-" + name)).write_bytes((source / name).read_bytes())
 version = json.loads((source / "manifest.json").read_text(encoding="utf-8"))["version"]
 files = sorted(path for path in source.iterdir() if path.suffix in {".js", ".json", ".html", ".css", ".svg", ".png"})
 with ZipFile(root / "edge-homework-import.zip", "w", ZIP_DEFLATED) as archive:

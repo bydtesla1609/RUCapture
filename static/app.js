@@ -21,7 +21,7 @@ let publicRegistration=false;
 let authMode="login", accountName="", registrationOpen=false, isAdmin=false;
 let editingWebsite=-1, websiteBusy=false;
 let syncStep=1,syncVisited=1,syncExecuted=false,cloudPanelLoading=false;
-const syncGuideVersion=document.getElementById("app-version").textContent+":1.9.5";
+const syncGuideVersion=document.getElementById("app-version").textContent+":1.9.6";
 let archiveCategory="全部", archiveItems=[], archiveTotal=0, archiveSequence=0;
 let selectedDay = localInput(new Date()).slice(0,10), calendarMonth = selectedDay.slice(0,7);
 
@@ -793,7 +793,7 @@ function loadSyncProgress(){
   }catch{}
 }
 function syncStepStates(){
-  return [!!collectorState && (collectorState.version || "0").localeCompare("1.9.5",undefined,{numeric:true})>=0,!!collectorState?.connected,!!sourceLinksState?.length,!!cloudState?.enabled,syncExecuted];
+  return [!!collectorState && (collectorState.version || "0").localeCompare("1.9.6",undefined,{numeric:true})>=0,!!collectorState?.connected,!!sourceLinksState?.length,!!cloudState?.enabled,syncExecuted];
 }
 function updateSyncSteps(){
   const states=syncStepStates();
@@ -836,14 +836,14 @@ window.addEventListener("message",async event=>{
 function updateSyncControls() {
   const connected=!!collectorState?.connected;
   $("collector-controls").hidden=!collectorState || connected;
-  $("install-state").textContent=collectorState?`已安装 v${collectorState.version} · ${syncStepStates()[0]?"已是最新版本":"请更新至 v1.9.5"}`:"仅需在电脑上安装一次";
+  $("install-state").textContent=collectorState?`已安装 v${collectorState.version} · ${syncStepStates()[0]?"已是最新版本":"请更新至 v1.9.6"}`:"仅需在电脑上安装一次";
   $("collector-options").disabled=!collectorState;
   $("sync-existing").hidden=!!collectorState || !cloudState?.enabled;
   $("browser-settings").hidden=!connected;
   $("collector-scan").disabled=syncing || !(cloudState?.enabled || (connected && collectorState.enabled));
   $("collector-scan").textContent=syncing?"正在同步…":"一键同步";
   $("cloud-authorize").disabled=!connected || !cloudState?.available;
-  $("cloud-authorize").textContent=syncStepStates()[0]?"打开云端授权":"先更新扩展至 v1.9.5";
+  $("cloud-authorize").textContent=syncStepStates()[0]?"打开云端授权":"先更新扩展至 v1.9.6";
   if(!connected){$("cloud-panel").replaceChildren();$("cloud-authorize").hidden=false;}
   $("cloud-revoke").hidden=!cloudState?.enabled;
   $("cloud-revoke").disabled=syncing || !cloudState?.enabled;

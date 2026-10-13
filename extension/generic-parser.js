@@ -34,21 +34,49 @@ globalThis.CampusGeneric=(()=>{
     return root?parts.length?`:scope > ${parts.join(" > ")}`:":scope":parts.join(" > ");
   }
   function repeated(node) {
-    const semantic=node.closest('tr,li,article,[role="row"],.assignment,.homework,.task-card');
+    const semantic=node.closest('tr,li,article,[role="row"],.assignment,.homework,.task-card,.el-collapse-item,.ant-collapse-item');
     if(semantic)return semantic;
     for(let parent=node.parentElement;parent && parent!==document.body;parent=parent.parentElement){
       const siblings=[...parent.parentElement.children].filter(other=>other.tagName===parent.tagName && other.className===parent.className);
-      if(siblings.length>=2 && parent.querySelector('a[href],h2,h3,h4'))return parent;
+      if(siblings.length>=2 && text(parent).length<=2000 && (parent.querySelector('a[href],h2,h3,h4') || siblings.every(other=>/\d{4}[-/年]\d{1,2}[-/月]\d{1,2}/.test(text(other)))))return parent;
     }
     throw new Error("没有找到重复的任务行，请点选一条任务内的标题");
   }
   function rowSelector(row) {
     const classes=[...row.classList].filter(name=>!/active|selected|done|complete|pending|odd|even|hover/i.test(name));
-    return `${path(row.parentElement)} > ${row.tagName.toLowerCase()}${classes.map(name=>'.'+CSS.escape(name)).join("")}`;
+    const selector=`${row.tagName.toLowerCase()}${classes.map(name=>'.'+CSS.escape(name)).join("")}`;
+    // Collapse lists often split current and ended tasks into separate containers.
+    return classes.some(name=>/^(?:el-collapse-item|ant-collapse-item|assignment|homework|task-card|exam-card)$/.test(name))?selector:`${path(row.parentElement)} > ${selector}`;
   }
   function pickTitle(node) {
     const row=repeated(node);
-    return {rows:rowSelector(row),title:path(node,row),due:"",status:"",course:""};
+    return {rows:rowSelector(row),title:path(node,row),...fields(row)};
+  }
+  function pickField(rule,node,field) {
+    let row=node.closest(rule.rows);
+    if(!row){
+      // Repair old title-only rules when a sibling date/status is selected.
+      for(const old of document.querySelectorAll(rule.rows)){
+        const title=rule.title===':scope'?old:old.querySelector(rule.title);
+        if(!title)continue;
+        const candidate=repeated(title);
+        if(candidate.contains(node)){rule=pickTitle(title);row=candidate;break;}
+      }
+    }
+    if(!row)throw new Error('请在同一任务列表内点选该字段');
+    if(field==='due')while(node!==row && !deadline(node) && node.parentElement)node=node.parentElement;
+    return {...rule,[field]:path(node,row)};
+  }
+  const completion=value=>globalThis.CampusParsers?.progress(value) || (/^(?:已完成|已提交|已交卷|已交|待批阅|已批阅|已批改|completed|submitted)$/i.test(value)?'done':/^(?:未完成|未提交|未交卷|未交|待提交|待重做|已退回|not submitted|incomplete)$/i.test(value)?'todo':null);
+  function fields(row) {
+    const nodes=[...row.querySelectorAll('time,[datetime],[data-due],[data-deadline],span,p,div,td')].filter(visible);
+    let dates=nodes.filter(node=>deadline(node));
+    // Prefer an explicitly labelled deadline or a complete start/end range over an isolated start date.
+    const priority=node=>/截止|结束|deadline|due/i.test(text(node)) || node.matches('[data-due],[data-deadline]')?0:dateMatches(text(node)).length===2?1:2;
+    if(dateMatches(text(row)).length>1 && dates.every(node=>priority(node)===2))dates=[];
+    dates.sort((a,b)=>priority(a)-priority(b)||text(a).length-text(b).length);
+    const states=nodes.filter(node=>completion(text(node).replace(/^(?:提交状态|完成状态|状态)[:：]?\s*/,''))).sort((a,b)=>text(a).length-text(b).length);
+    return {due:dates[0]?path(dates[0],row):'',status:states[0]?path(states[0],row):'',course:''};
   }
   function detect(doc=document) {
     const candidates=[];
@@ -70,30 +98,31 @@ globalThis.CampusGeneric=(()=>{
       candidates.push({rows:rowSelector(row),title:field(title),due:field(due),status:field(status),course:field(course)});
     }
     if(candidates.length)return candidates[0];
-    for(const title of doc.querySelectorAll('main h2,main h3,main h4,article h2,article h3,.assignment a,.homework a,.task-card a')){
+    const titles=[...doc.querySelectorAll('main h2,main h3,main h4,article h2,article h3,a[href],[class*="title"],[class*="name"]')];
+    for(const node of [...doc.querySelectorAll('span,p,div')].slice(0,3000))if(!node.children.length && /作业|任务|assignment|homework/i.test(node.textContent))titles.push(node);
+    for(const title of [...new Set(titles)].slice(0,2000)){
       if(!visible(title))continue;
+      const titleText=text(title);if(!titleText || titleText.length>500 || dateMatches(titleText).length || completion(titleText))continue;
       try{
         const rule=pickTitle(title),rows=[...doc.querySelectorAll(rule.rows)].filter(visible);
-        if(rows.length<2 || !rows.some(row=>/截止|DDL|deadline|due|作业|assignment/i.test(row.textContent)))continue;
-        const row=rows[0],due=row.querySelector('time,.deadline,.due-date,[data-due]'),status=row.querySelector('.status,[data-status]');
-        return {...rule,due:due?path(due,row):"",status:status?path(status,row):""};
+        if(!rows.length || rows.length===1 && !rows[0].matches('.assignment,.homework,.task-card,.el-collapse-item,.ant-collapse-item') || !rows.some(row=>/截止|DDL|deadline|due|作业|任务|assignment|homework/i.test(text(row))))continue;
+        const row=rows[0];
+        // Skip wrappers that combine a completion badge and the actual title.
+        if([...title.children].some(child=>completion(text(child))))continue;
+        return {...rule,...fields(row)};
       }catch{}
     }
     return null;
   }
+  const normalized=value=>compact(value).replace(/[：]/g,':');
+  const dateMatches=value=>[...normalized(value).matchAll(/(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?/g)];
   function deadline(node) {
     if(!visible(node))return null;
-    const raw=node.getAttribute('datetime') || text(node);
-    const match=raw.match(/(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?/);
-    if(!match)return null;
-    const [,year,month,day,hour,minute,second="00",zone="+08:00"]=match;
-    if(+month<1 || +month>12 || +day<1 || +day>new Date(Date.UTC(+year,+month,0)).getUTCDate() || +hour>23 || +minute>59 || +second>59)return null;
-    const date=new Date(`${year}-${month.padStart(2,"0")}-${day.padStart(2,"0")}T${hour.padStart(2,"0")}:${minute}:${second}${zone}`);
-    return Number.isFinite(date.getTime())?date.toISOString():null;
+    return CampusParsers.deadline(node.getAttribute('data-due') || node.getAttribute('data-deadline') || node.getAttribute('datetime') || text(node));
   }
   async function extract(rule,address,doc=document) {
     rule=validateRule(rule);
-    if(doc.querySelector('input[type="password"]'))throw new Error("请先完成网站登录，再读取列表");
+    if([...doc.querySelectorAll('input[type="password"]')].some(node=>node.getClientRects().length && !node.closest('[hidden],[aria-hidden="true"]')))throw new Error("请先完成网站登录，再读取列表");
     const rows=[...doc.querySelectorAll(rule.rows)].filter(visible);
     if(!rows.length)throw new Error("未找到原来的任务列表，请确认页面已加载，必要时重新点选字段");
     if(rows.length>200)throw new Error("当前页面超过 200 条，请分页面读取");
@@ -112,10 +141,10 @@ globalThis.CampusGeneric=(()=>{
       if(seen.has(external_id))throw new Error("列表含同名且无法区分的任务，请点选各自的标题链接后重试");
       seen.add(external_id);
       const state=text(get('status')).replace(/^(?:提交状态|完成状态|状态)[:：]?\s*/,"");
-      const status=globalThis.CampusParsers?.progress(state) || (/^(?:已完成|已提交|待批阅|已批阅|已批改|completed|submitted)$/i.test(state)?'done':/^(?:未完成|未提交|待提交|待重做|已退回|not submitted|incomplete)$/i.test(state)?'todo':null);
+      const status=completion(state);
       tasks.push({external_id,title,content:"",due_at:deadline(get('due')),...(status?{status}:{}),course:text(get('course')).slice(0,300),source_url:link || address,stable:!!link});
     }
     return tasks;
   }
-  return {pageKey,validateRule,path,pickTitle,detect,extract};
+  return {pageKey,validateRule,path,pickTitle,pickField,detect,extract};
 })();

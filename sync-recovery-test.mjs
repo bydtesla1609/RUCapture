@@ -4,6 +4,14 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 import './extension/parsers.js';
 import './extension/ruc-adapters.js';
+
+test('DOM deadlines use valid range ends and reject ambiguous, impossible or reversed dates',()=>{
+  const deadline=CampusParsers.deadline;
+  for(const separator of [' - ',' 至 ',' ～ ',' — ','，截止时间：'])assert.equal(deadline(`2026-09-29 19:00:00${separator}2026-10-13 23:59:59`),'2026-10-13T15:59:59.000Z');
+  assert.equal(deadline('截止：2026年10月13日 23：59'),'2026-10-13T15:59:00.000Z');
+  assert.equal(deadline('2026-10-13T23:59:59+08:00'),'2026-10-13T15:59:59.000Z');
+  for(const value of ['2026-02-30 10:00','2026-10-13 10:00 - 2026-10-12 10:00','2026-02-30 10:00 - 2026-03-02 10:00','创建于2026-10-01 10:00 修改于2026-10-02 10:00','开始时间：2026-10-01 10:00','2026-10-13'])assert.equal(deadline(value),null,value);
+});
 test('automatic scans reuse tabs, stop after closure/login errors and skip authorized cloud sources',async()=>{
   const link={source:'smartestu',url:'https://smartestu.cn/assignment'};
   let saved={enabled:true,boardURL:'https://campus-task-board.pages.dev',token:'synthetic'},created=0,navigated=0,reloads=0,read=0;

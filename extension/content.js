@@ -76,12 +76,20 @@
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",observe,{once:true});else observe();
   chrome.runtime.sendMessage({type:"collection-context"}).then(result=>{
     managed=!!result?.managed;cloudEnabled=!!result?.cloudEnabled;
-    window.postMessage({kind:"campus-cloud-mode",enabled:cloudEnabled},location.origin);
+    globalThis.RUCaptureStatus?.update({enabled:!!result?.enabled});
+    window.postMessage({kind:"campus-cloud-mode",enabled:cloudEnabled,browserEnabled:!!result?.enabled},location.origin);
     window.postMessage({kind:"campus-ruc-mode",enabled:!!result?.enabled,cloudEnabled},location.origin);
     if(result?.enabled){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",readYOJ,{once:true});else readYOJ();}
     readLearning();
   }).catch(()=>{});
-  chrome.runtime.onMessage.addListener(message=>{if(message.type==="read-current") {lastDocument="";readLearning();readYOJ();}});
+  chrome.runtime.onMessage.addListener(message=>{
+    if(message.type==="collection-result" && message.source===source)globalThis.RUCaptureStatus?.update({error:message.error || '',message:message.error?'':`已读取 ${message.count || 0} 项，已同步到看板。`,tasks:message.tasks || []});
+    if(message.type==="read-current") {
+      lastDocument="";readLearning();readYOJ();
+      if(['weilai','tuoj'].includes(source)){globalThis.RUCaptureStatus?.update({error:'',message:'正在重新读取。尚未进入列表时，请先打开课程或作业栏目。'});window.postMessage({kind:'campus-ruc-read'},location.origin);}
+      else if(!['chaoxing','yoj'].includes(source)){globalThis.RUCaptureStatus?.update({error:'',message:'正在重新读取。尚未进入列表时，请先打开作业栏目。'});window.postMessage({kind:'campus-read-current'},location.origin);}
+    }
+  });
   setTimeout(()=>{
     if(seen || !managed || (window.top!==window && (source!=="chaoxing" || !/\/work\/(list|all-task)(?:\?|$)/.test(location.href)))) return;
     const text=document.body?.innerText || "";

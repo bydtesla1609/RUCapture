@@ -8,6 +8,8 @@ __pycache__/
 node_modules/
 dist/
 *.zip
+extension/page-parsers.js
+extension/page-ruc-adapters.js
 .env.*
 .dev.vars.*
 wrangler.jsonc

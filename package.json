@@ -19,6 +19,8 @@
     "build:trial": "node build-pages.mjs --trial",
     "test:generic-ui": "node generic-ui-test.mjs",
     "test:generic-native": "node generic-native-test.mjs",
+    "test:generic-recognition": "node generic-recognition-test.mjs",
+    "test:source-native": "node source-native-test.mjs",
     "test:community-ui": "node community-ui-test.mjs",
     "test:capture-ui": "node capture-ui-test.mjs",
     "test:public-ui": "node public-ui-test.mjs",

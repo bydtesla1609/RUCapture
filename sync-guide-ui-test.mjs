@@ -4,11 +4,14 @@ import {mkdtemp,cp,readFile,writeFile,rm,mkdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
 import {createEnvironment} from './local.mjs';
+import {execFileSync} from 'node:child_process';
+execFileSync('python',['package-extension.py'],{stdio:'inherit'});
 import worker,{RELEASE} from './worker.mjs';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root=resolve(tmpdir()),dir=await mkdtemp(join(root,'rucapture-sync-ui-')),ext=join(dir,'extension');
 const {env,database}=await createEnvironment(join(dir,'db'),'isolated-sync-test');env.CLOUD_ENCRYPTION_KEY='12'.repeat(32);
 database.prepare("INSERT INTO settings(key,value) VALUES('read_release',?)").run(RELEASE.version);
+database.prepare("INSERT INTO settings(key,value) VALUES('daily_summary_seen',?)").run(new Date(Date.now()+8*3600000).toISOString().slice(0,10));
 await cp('extension',ext,{recursive:true});
 const manifest=JSON.parse(await readFile(join(ext,'manifest.json'),'utf8'));
 // Pregrant in this disposable profile; use real extension APIs without an OS prompt.
@@ -32,7 +35,7 @@ try{
  const page=await context.newPage();await page.goto(origin);
  assert.equal(await page.locator('.cloud-core svg').count(),1);
  await page.locator('#password').fill('isolated-sync-test');await page.locator('#login-form button[type=submit]').click();await page.locator('#workspace').waitFor();
- await page.locator('#sources-button').click();await page.waitForFunction(()=>document.getElementById('install-state').textContent.includes('1.9.5'));
+ await page.locator('#sources-button').click();await page.waitForFunction(()=>document.getElementById('install-state').textContent.includes('1.9.6'));
  await page.locator('#sync-tab-5').click();assert.equal(await page.locator('#guide-install').isVisible(),true,'progress indicators cannot navigate');
  await page.locator('#collector-recheck').click();assert.equal(await page.locator('#guide-install').isVisible(),true);await page.locator('#sync-next').click();
  await page.locator('#account-setup').waitFor();assert.equal(await page.locator('#sync-tab-1').getAttribute('class'),'complete');

@@ -48,7 +48,7 @@ try {
   // A new layout can be taught using clicks; the title link must not navigate.
   saved=null;imports=[];
   html='<main><div class="tiles"><div class="tile"><a href="/work/10">自定义任务甲</a><div class="due">2026-11-01 18:30</div><span class="state">已提交</span></div><div class="tile"><a href="/work/11">自定义任务乙</a><div class="due">2026-11-02 19:30</div><span class="state">未提交</span></div></div></main>';
-  await open('https://class.example/custom');await ui.locator('[role=status]').filter({hasText:'暂未识别'}).waitFor();
+  await open('https://class.example/custom');await ui.getByRole('checkbox').first().waitFor();
   for(const [label,selector] of [['标题','.tile a'],['截止时间','.tile .due'],['完成状态','.tile .state']]){
     await ui.getByRole('button',{name:`点选${label}`,exact:true}).click();await page.locator(selector).first().click();
     await ui.getByRole('checkbox').first().waitFor();
@@ -60,8 +60,8 @@ try {
   // Without distinct task links, confirmation is required every time.
   saved=null;imports=[];html=table.replaceAll(/<a href="[^"]+">|<\/a>/g,'');
   await open();await ui.getByRole('checkbox').first().waitFor();await ui.getByRole('button',{name:'确认导入并保存规则'}).click();await ui.locator('[role=status]').filter({hasText:'已导入 3 项'}).waitFor();assert.equal(saved.automatic,false);
-  await open();await ui.getByRole('button',{name:'RUChecklist · 读取任务',exact:true}).waitFor();assert.equal(imports.length,1);
-  await ui.getByRole('button',{name:'RUChecklist · 读取任务',exact:true}).click();
+  await open();await ui.getByRole('button',{name:'RUCapture · 读取任务',exact:true}).waitFor();assert.equal(imports.length,1);
+  await ui.getByRole('button',{name:'RUCapture · 读取任务',exact:true}).click();
   await page.locator('tbody tr').nth(1).locator('td').first().evaluate(node=>node.textContent='第一次作业');await ui.getByRole('button',{name:'重新读取',exact:true}).click();await ui.locator('[role=status]').filter({hasText:'无法区分'}).waitFor();assert.equal(await ui.getByRole('button',{name:'确认导入并保存规则'}).isDisabled(),true);
   saved=null;imports=[];html=table.replace(/<tbody>[\s\S]*?<\/tbody>/,'<tbody><tr><td colspan="3">暂无作业</td></tr></tbody>');
   await open('https://class.example/empty');await ui.getByRole('button',{name:'确认空列表并保存规则',exact:true}).click();await ui.locator('[role=status]').filter({hasText:'已导入 0 项'}).waitFor();assert.equal(imports[0].empty,true);assert.equal(imports[0].tasks.length,0);

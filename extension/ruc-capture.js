@@ -3,12 +3,13 @@
   if(!source)return;
   const nativeFetch=window.fetch.bind(window),open=XMLHttpRequest.prototype.open,send=XMLHttpRequest.prototype.send,setHeader=XMLHttpRequest.prototype.setRequestHeader;
   const requests=new WeakMap(),tasks=new Map(),busy=new Set();
-  let enabled=false,cloudEnabled=false,pending;
+  let enabled=false,cloudEnabled=false,pending,lastRecipe;
   const allowed=(url,method)=>CampusCloudRoutes.source(new URL(url,location.href).href)===source && method===(source==="weilai"?"POST":"GET");
   function snapshot(url,method,headers,body) {
     return {url:new URL(url,location.href).href,method,headers:Object.fromEntries([...new Headers(headers)].filter(([name])=>CampusCloudRoutes.headers.includes(name))),body:body || ""};
   }
   async function publish(recipe,value) {
+    lastRecipe=recipe;
     if(!enabled){pending={recipe,value};return;}
     const key=recipe.url+recipe.body;if(busy.has(key))return;busy.add(key);
     try {
@@ -27,6 +28,10 @@
     finally{busy.delete(key);}
   }
   window.addEventListener("message",event=>{
+    if(event.source===window && event.origin===location.origin && event.data?.kind==='campus-ruc-read' && enabled){
+      if(lastRecipe)publish(lastRecipe);
+      return;
+    }
     if(event.source!==window || event.origin!==location.origin || event.data?.kind!=="campus-ruc-mode")return;
     enabled=event.data.enabled===true;cloudEnabled=event.data.cloudEnabled===true;
     if(enabled && pending){const value=pending;pending=null;publish(value.recipe,value.value);}

@@ -25,6 +25,22 @@ globalThis.CampusParsers = (() => {
     if(!parsed || !Number.isFinite(parsed.getTime())) throw new Error("作业截止时间格式发生变化");
     return parsed.toISOString();
   }
+  // DOM time labels may contain a start/end range. Never infer a deadline from ambiguous dates.
+  function deadline(value) {
+    const raw=String(value || '').replace(/\s+/g,' ').replace(/：/g,':').trim();
+    const matches=[...raw.matchAll(/(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?/g)];
+    if(matches.length===2){
+      const between=raw.slice(matches[0].index+matches[0][0].length,matches[1].index);
+      if(!/^\s*(?:[-–—~～至到]|(?:[,，;；]?\s*)?(?:截止|结束|deadline|due)(?:时间)?\s*[:：]?)\s*$/i.test(between))return null;
+    }else if(matches.length!==1 || /^(?:开始|开放|发布时间|创建|start)/i.test(raw) && !/截止|结束|deadline|due/i.test(raw))return null;
+    const dates=matches.map(match=>{
+      const [,year,month,day,hour,minute,second='00',zone='+08:00']=match;
+      if(+month<1 || +month>12 || +day<1 || +day>new Date(Date.UTC(+year,+month,0)).getUTCDate() || +hour>23 || +minute>59 || +second>59)return null;
+      const parsed=new Date(`${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}T${hour.padStart(2,'0')}:${minute}:${second}${zone}`);
+      return Number.isFinite(parsed.getTime())?parsed.toISOString():null;
+    });
+    return dates.some(value=>!value) || dates.length===2 && dates[1]<dates[0]?null:dates.at(-1);
+  }
   function walk(value,visit,depth=0) {
     if(depth>12 || !value || typeof value!=="object") return;
     visit(value);
@@ -106,8 +122,7 @@ globalThis.CampusParsers = (() => {
       else if(/未交|未提交|打回|退回|重做/.test(statusText)) status="todo";
       else if(/待互[评評]/.test(statusText)) status="doing";
       else if(/已完成|已提交|已交|待批[阅閱改]|已批[阅閱改]|已互[评評]/.test(statusText)) status="done";
-      const absolute=row.time.match(/\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2}(?::\d{2})?/);
-      const task={external_id:`${course}:${id}`,content:row.title.trim(),due_at:absolute?date(absolute[0]):null,course:"",source_url:url.href};
+      const task={external_id:`${course}:${id}`,content:row.title.trim(),due_at:deadline(row.time),course:"",source_url:url.href};
       if(status) task.status=status;
       result.set(task.external_id,task);
     }
@@ -117,12 +132,12 @@ globalThis.CampusParsers = (() => {
     if(!/\/work\/(?:list|all-task)(?:\?|$)/.test(pageURL)) return null;
     const rows=[...document.querySelectorAll("li[data]")].filter(row=>row.querySelector(".overHidden2") && row.querySelector(".status")).map(row=>{
       const time=row.querySelector(".time");
-      return {url:row.getAttribute("data"),title:row.querySelector(".overHidden2").textContent,status:row.querySelector(".status").textContent,time:[time?.getAttribute("title"),time?.getAttribute("data-time"),time?.textContent].filter(Boolean).join(" ")};
+      return {url:row.getAttribute("data"),title:row.querySelector(".overHidden2").textContent,status:row.querySelector(".status").textContent,time:[time?.getAttribute("title"),time?.getAttribute("data-time"),time?.textContent].find(value=>deadline(value)) || ''};
     });
     const tasks=chaoxingRows(rows,pageURL);
     if(tasks.length) return tasks;
     if(document.querySelector(".ulDiv, .work-list") && /暂无作业|没有作业|暂无相关/.test(document.body?.textContent || "")) return [];
     return null;
   }
-  return {parse,date,progress,chaoxing,chaoxingRows};
+  return {parse,date,deadline,progress,chaoxing,chaoxingRows};
 })();

@@ -34,7 +34,8 @@ async function genericOpen() {
 }
 async function genericContext(sender) {
   if(!sender.tab || sender.frameId!==0)throw new Error("请将列表在独立标签页中打开后配置");
-  const data=await genericConfig(),key=CampusGeneric.pageKey(sender.url),link=data.links.find(link=>CampusGeneric.pageKey(link.url)===key);
+  const data=await genericConfig(),key=CampusGeneric.pageKey(sender.url),link=data.links.find(link=>CampusGeneric.pageKey(link.url)===key) || data.links.find(link=>new URL(link.url).origin===new URL(sender.url).origin);
+  // A configured site may navigate from a landing page to its actual list. Rules remain page-specific.
   if(!link || !data.enabled)throw new Error("此页面未配置同步，或浏览器导入已暂停");
   if(!await chrome.permissions.contains({origins:[`${new URL(sender.url).origin}/*`]}))throw new Error("此网站的读取权限已撤销，请从看板重新授权");
   const ruleKey=`${data.binding}|${key}`,rule=data.genericRules?.[ruleKey];

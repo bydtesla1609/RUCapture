@@ -2,14 +2,26 @@
   if(window.top!==window) return;
   const source=location.hostname==="smartestu.cn" ? "smartestu":location.hostname==="www.zhifz.com"?"zhifz":"ketangpai";
   const collected=new Map();
-  let cloudEnabled=false,zhifzSequence=0;
-  window.addEventListener("message",event=>{if(event.source===window && event.origin===location.origin && event.data?.kind==="campus-cloud-mode") cloudEnabled=event.data.enabled===true;});
+  let cloudEnabled=false,browserEnabled=false,zhifzSequence=0,lastRead,reading=false;
+  window.addEventListener("message",async event=>{
+    if(event.source!==window || event.origin!==location.origin)return;
+    if(event.data?.kind==='campus-cloud-mode'){cloudEnabled=event.data.enabled===true;browserEnabled=event.data.browserEnabled===true;}
+    if(event.data?.kind!=='campus-read-current' || !browserEnabled || !lastRead || reading)return;
+    reading=true;
+    try{
+      const request=lastRead,response=await originalFetch(request.url,{method:request.method,headers:request.headers,...(request.method==='POST'?{body:request.body}:{}),credentials:'same-origin',redirect:'error',signal:AbortSignal.timeout(15000)});
+      if(!response.ok)throw new Error(`列表读取失败（HTTP ${response.status}），请检查网站登录状态后重试`);
+      await publish(request.url,await response.json(),request);
+    }catch(error){window.postMessage({kind:'campus-assignments-v1',source,tasks:[],error:error.message},location.origin);}
+    finally{reading=false;}
+  });
   function recipe(url,method,headers,body) {
-    if((!cloudEnabled && source!=="zhifz") || !CampusCloudRoutes.source(new URL(url,location.href).href))return;
+    if(!['GET','POST'].includes(String(method || 'GET').toUpperCase()) || CampusCloudRoutes.source(new URL(url,location.href).href)!==source)return;
     return {url:new URL(url,location.href).href,method:String(method || "GET").toUpperCase(),headers:Object.fromEntries([...new Headers(headers)].filter(([name])=>CampusCloudRoutes.headers.includes(name))),body:body || ""};
   }
   const allowed=(url,method="GET")=>source==="zhifz"?String(method).toUpperCase()==="GET" && CampusCloudRoutes.source(new URL(url,location.href).href)==="zhifz":source==="smartestu" ? /\/api\/homework\/student\/mark\/queryHomeworks(?:\?|$)/.test(url) : /\/(?:FutureV2\/CourseMeans\/getCourseContent|Futurev2\/Homework\/getListByCourseToStudent)(?:\?|$)/i.test(url);
   async function publish(url,value,request) {
+    if(request)lastRead=request;
     const sequence=source==="zhifz"?++zhifzSequence:0;
     try {
       const tasks=CampusParsers.parse(source,url,value,location.href);
@@ -40,8 +52,8 @@
   window.fetch=async function(...args) {
     let snapshot;
     const method=args[1]?.method || args[0]?.method || "GET";
-    if((cloudEnabled || source==="zhifz") && allowed(String(args[0]?.url || args[0]),method)) {
-      try{const req=new Request(args[0],args[1]);snapshot=req.clone().text().then(body=>recipe(req.url,req.method,req.headers,body)).catch(()=>undefined);}catch{}
+    if(allowed(String(args[0]?.url || args[0]),method)) {
+      try{const req=new Request(typeof args[0]==='string'?new URL(args[0],location.href):args[0],args[1]);snapshot=req.clone().text().then(body=>recipe(req.url,req.method,req.headers,body)).catch(()=>undefined);}catch{}
     }
     const response=await originalFetch.apply(this,args);
     const url=response.url || String(args[0]?.url || args[0]);
@@ -51,7 +63,7 @@
   const open=XMLHttpRequest.prototype.open,send=XMLHttpRequest.prototype.send;
   const urls=new WeakMap(),requests=new WeakMap(),setHeader=XMLHttpRequest.prototype.setRequestHeader;
   XMLHttpRequest.prototype.open=function(method,url,...rest){urls.set(this,String(url));requests.set(this,{method,headers:{}});return open.call(this,method,url,...rest);};
-  XMLHttpRequest.prototype.setRequestHeader=function(name,value){const req=requests.get(this);if((cloudEnabled || source==="zhifz") && req && CampusCloudRoutes.headers.includes(name.toLowerCase()))req.headers[name]=String(value);return setHeader.call(this,name,value);};
+  XMLHttpRequest.prototype.setRequestHeader=function(name,value){const req=requests.get(this);if(req && allowed(urls.get(this) || '',req.method) && CampusCloudRoutes.headers.includes(name.toLowerCase()))req.headers[name]=String(value);return setHeader.call(this,name,value);};
   XMLHttpRequest.prototype.send=function(...args){
     const url=urls.get(this) || "";
     if(allowed(url,requests.get(this)?.method)) this.addEventListener("load",()=>{

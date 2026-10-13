@@ -2,6 +2,8 @@
 // mocked board backend. No user cookies, browser profile or server data involved.
 import assert from "node:assert/strict";
 import {fileURLToPath} from "node:url";
+import {execFileSync} from 'node:child_process';
+execFileSync('python',['package-extension.py'],{stdio:'inherit'});
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE || "playwright");
 const extension=fileURLToPath(new URL('./extension/',import.meta.url));
 const context=await chromium.launchPersistentContext('',{headless:true,channel:'chromium',executablePath:process.env.BROWSER_EXECUTABLE,ignoreDefaultArgs:['--disable-extensions'],args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
