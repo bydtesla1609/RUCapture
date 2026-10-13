@@ -12,6 +12,7 @@ for name in ("parsers.js", "ruc-adapters.js"):
     (source / ("page-" + name)).write_bytes((source / name).read_bytes())
 version = json.loads((source / "manifest.json").read_text(encoding="utf-8"))["version"]
 files = sorted(path for path in source.iterdir() if path.suffix in {".js", ".json", ".html", ".css", ".svg", ".png"})
+files += [root / "LICENSE", root / "COPYRIGHT"]
 with ZipFile(root / "edge-homework-import.zip", "w", ZIP_DEFLATED) as archive:
     for path in files:
         archive.write(path, "extension/" + path.name)

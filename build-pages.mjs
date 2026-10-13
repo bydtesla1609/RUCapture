@@ -5,6 +5,7 @@ import {trialSchema} from "./trial-schema.mjs";
 execFileSync("python",["-X","utf8",fileURLToPath(new URL("./package-extension.py",import.meta.url))],{stdio:"inherit"});
 const publicSite=process.argv.includes("--public"),trial=publicSite || process.argv.includes("--trial"),folder=publicSite?"public":trial?"trial":"pages",output=new URL(`./dist/${folder}/`,import.meta.url);
 await mkdir(output,{recursive:true});
+for(const name of ["LICENSE","COPYRIGHT"]) await copyFile(new URL(`./${name}`,import.meta.url),new URL(name,output));
 for(const name of ["index.html","app.js","capture.js","planning.js","axis-layout.js","messages.js","style.css","effects.css","icon.svg","extension.zip"]) await copyFile(new URL(`./static/${name}`,import.meta.url),new URL(name,output));
 await copyFile(new URL(trial?"./trial-worker.mjs":"./worker.mjs",import.meta.url),new URL("_worker.js",output));
 if(trial) {
