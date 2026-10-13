@@ -142,6 +142,7 @@ dialog#sources-dialog.demo-preview,#sources-dialog.demo-preview .guide-step{anim
 .quadrant-board{--planning-height:clamp(560px,67vh,780px);display:grid;grid-template-columns:272px minmax(0,1fr);gap:20px;align-items:start}
 .planning-pending{height:var(--planning-height);display:flex;flex-direction:column;min-width:0;padding:20px 14px 16px;background:var(--panel);border:1px solid var(--border);border-radius:16px}
 .planning-pending h3{font-size:17px;padding:0 4px}.planning-pending>.hint{font-size:12px;padding:0 4px}
+.planning-touch-help{display:none}.planning-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .compact-task-list{display:flex;flex-direction:column;gap:10px}.planning-list{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;margin-top:18px;padding:1px 3px 6px}
 .planning-card{display:flex;flex:none;align-items:center;gap:8px;min-width:0;height:90px;border:1px solid #a79bff30;border-radius:11px;background:linear-gradient(110deg,#2a2d4c,#232740);padding:10px;box-shadow:0 4px 12px #080b1c30;cursor:grab;user-select:none}
 .compact-task-info{display:block;min-width:0;flex:1;line-height:1.45}.compact-task-info strong{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
@@ -193,7 +194,15 @@ dialog#sources-dialog.demo-preview,#sources-dialog.demo-preview .guide-step{anim
 .focus-mode :is(#record-time-field,#record-time-field + .hint,#task-location-field,label[for="task-axis"],#task-axis,.custom-select:has(#task-axis),.field-heading,#task-todos,.resource-heading,.resource-editor,#done-field){display:none}
 @media(min-width:681px){.sidebar-collapsed #focus-button:has(#focus-countdown:not(:empty)){padding-left:3px;padding-right:3px;justify-content:center}.sidebar-collapsed #focus-button:has(#focus-countdown:not(:empty)) .nav-icon{display:none}.sidebar-collapsed #focus-button #focus-countdown{display:block;max-width:none;opacity:1;margin:0;font-size:10px}}
 @media(max-width:1150px){.quadrant-board{grid-template-columns:232px minmax(0,1fr);gap:12px}.planning-pending{padding:16px 10px}}
-@media(max-width:900px){.quadrant-board{grid-template-columns:1fr}.planning-pending{height:var(--planning-height)}}
+@media(max-width:900px){
+  .quadrant-board{grid-template-columns:minmax(0,1fr);--planning-height:clamp(300px,52dvh,520px)}
+  .planning-pending{height:auto;padding:12px 10px}
+  .planning-touch-help{display:block;margin:6px 0 0;line-height:1.6}
+  .planning-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;touch-action:pan-x;margin-top:10px;overscroll-behavior-x:contain}
+  .planning-list .planning-card{width:254px;touch-action:pan-x}
+  .planning-handle{width:32px;min-height:44px}
+  .planning-card{touch-action:none;-webkit-touch-callout:none}
+}
 @media(max-width:680px){.sidebar-bottom #focus-button #focus-countdown{display:block;max-width:none;opacity:1;font-size:10px}.sidebar-bottom #focus-button:has(#focus-countdown:not(:empty)){gap:4px;padding:7px 4px}.sidebar-bottom #focus-button:has(#focus-countdown:not(:empty)) .nav-icon{display:none}.sidebar-bottom #focus-button>span:first-of-type{font-size:11px}.focus-clock-panel{padding:8px 10px 14px}.focus-clock-controls{gap:6px;flex-wrap:wrap}.focus-clock-controls button{padding:8px 12px}.focus-clock-controls #focus-toggle{min-width:180px}.quadrant-axis{font-size:10px}.focus-clock{gap:24px;padding:8px 10px 16px}.clock-digit{width:28px;height:50px}.clock-digits{gap:5px}.segment-a,.segment-d,.segment-g{height:5px;left:5px;right:5px}.segment-g{top:23px}.segment-b,.segment-c,.segment-e,.segment-f{width:5px;height:20px}.clock-unit:not(:last-child):after{right:-17px;top:43px;font-size:28px}.focus-choice{padding:11px;gap:10px}}
 @media(prefers-reduced-motion:reduce){.quadrant,.quadrant-direction{transition:none}}
 /* Calendar filters and the daily timeline share the same visible categories. */

@@ -145,6 +145,7 @@ try {
   const mobileCard = phone.locator("article.task").first();
   assert.deepEqual(await mobileCard.locator(".todo-text").allTextContents(), ["读论文并标注", "整理笔记"]);
   await phone.locator('#board').evaluate(async node=>{await Promise.allSettled(node.getAnimations().map(animation=>animation.finished));});
+  await phone.locator('main').evaluate(async node=>{await Promise.allSettled(node.getAnimations().map(animation=>animation.finished));});
   await mobileCard.locator('.todo-list').evaluate(node=>node.scrollIntoView({block:'center'}));
   const touch = await mobile.newCDPSession(phone);
   await saved(phone, async () => {
@@ -152,6 +153,7 @@ try {
     const x = a.x + a.width / 2, y = a.y + a.height / 2, target = b.y + b.height - 2;
     await touch.send("Input.dispatchTouchEvent", {type: "touchStart", touchPoints: [{x, y}]});
     for (let step = 1; step <= 8; step++) await touch.send("Input.dispatchTouchEvent", {type: "touchMove", touchPoints: [{x, y: y + (target - y) * step / 8}]});
+    await phone.waitForTimeout(200);await touch.send("Input.dispatchTouchEvent", {type:"touchMove",touchPoints:[{x,y:target}]});
     await touch.send("Input.dispatchTouchEvent", {type: "touchEnd", touchPoints: []});
   });
   assert.deepEqual(await mobileCard.locator(".todo-text").allTextContents(), ["整理笔记", "读论文并标注"]);

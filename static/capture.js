@@ -221,7 +221,7 @@ workspace.addEventListener("touchstart",event=>{
   navIgnoreClickUntil=0;
   if(event.touches.length!==1){finishNavGesture(true);navGesture=null;return;}
   if(!mobileNavigation.matches || workspace.hidden || document.querySelector("dialog[open],:popover-open"))return;
-  if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.axes-canvas,.quadrant-viewport,.planning-handle,.drag-handle,.clock-value'))return;
+  if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.axes-canvas,.quadrant-viewport,.planning-pending,.planning-card,.drag-handle,.clock-value'))return;
   for(let node=event.target;node && node!==workspace;node=node.parentElement)if(node.scrollWidth>node.clientWidth+2 && /auto|scroll/.test(getComputedStyle(node).overflowX))return;
   const point=event.touches[0];
   navGesture={x:point.clientX,y:point.clientY,dx:0,open:workspace.classList.contains("mobile-nav-open"),width:sidebar.getBoundingClientRect().width,offset:new DOMMatrixReadOnly(getComputedStyle(main).transform).m41,dragging:false};

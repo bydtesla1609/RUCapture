@@ -28,7 +28,7 @@ function renderQuadrants(){
   const board=$("board");board.className="quadrant-board";
   const sidebar=element("section",null,"planning-pending"),list=element("div",null,"compact-task-list planning-list");
   const items=pendingCards().sort(byPlanningTime),unplaced=items.filter(task=>quadrantPositions[task.id]?.x==null);
-  sidebar.append(element("h3",`待安排 · ${unplaced.length}`),list);
+  sidebar.append(element("h3",`待安排 · ${unplaced.length}`),element("p","左右滑动列表，向下拖动卡片到象限；轻点卡片可编辑。","hint planning-touch-help"),list);
   const viewport=element("div",null,"axes-canvas quadrant-viewport"),chart=element("section",null,"quadrant-chart"),world=element("div",null,"quadrant-world");chart.setAttribute("aria-label","紧急性与重要性坐标图");
   const offscreen=element("div",null,"quadrant-offscreen"),panels=[],labels=[],axisY=element("span","重要性 ↑","quadrant-axis axis-y"),axisX=element("span","紧急性 →","quadrant-axis axis-x");
   for(const q of QUADRANTS){
@@ -106,7 +106,7 @@ function renderQuadrants(){
   }
   const fit=()=>{
     const points=items.filter(task=>quadrantPositions[task.id]?.x!=null).map(task=>quadrantPoint(quadrantPositions[task.id]));
-    return Math.min(1,...points.map(p=>Math.min(viewport.clientWidth/(2*(Math.abs(p.x)+PLANNING_CARD.width/2+24)),viewport.clientHeight/(2*(Math.abs(p.y)+PLANNING_CARD.height/2+24)))));
+    return Math.min(1,viewport.clientWidth/(2*(PLANNING_CARD.width+24)),...points.map(p=>Math.min(viewport.clientWidth/(2*(Math.abs(p.x)+PLANNING_CARD.width/2+24)),viewport.clientHeight/(2*(Math.abs(p.y)+PLANNING_CARD.height/2+24)))));
   };
   function zoomButton(factor){const z=clamp(quadrantZoom*factor,.05,4),ratio=z/quadrantZoom;animateCamera({x:quadrantPan.x*ratio,y:quadrantPan.y*ratio,z});}
   zoomOut.onclick=()=>zoomButton(1/1.2);zoomIn.onclick=()=>zoomButton(1.2);zoomReset.onclick=()=>animateCamera({x:0,y:0,z:clamp(fit(),.05,4)});
@@ -145,22 +145,27 @@ function renderQuadrants(){
   const resize=new ResizeObserver(()=>{if(viewport.isConnected)draw();else resize.disconnect();});resize.observe(viewport);quadrantResize=resize;
   function row(task){
     const node=element("div",null,"planning-card"),handle=element("span","⠿","planning-handle");handle.setAttribute("aria-hidden","true");
-    node.dataset.taskId=task.id;node.append(handle,compactCard(task));node.title=task.title;node.ondblclick=()=>openTask(task);
+    node.dataset.taskId=task.id;node.append(handle,compactCard(task));node.title=task.title;node.tabIndex=0;node.setAttribute("role","button");node.setAttribute("aria-label",`${task.title}，拖动安排，按 Enter 编辑`);node.ondblclick=()=>openTask(task);
+    node.onclick=event=>{if(!event.detail)openTask(task);};
+    node.onkeydown=event=>{if(event.key==="Enter" || event.key===" "){event.preventDefault();openTask(task);}};
     node.onpointerdown=event=>{
-      if(event.button!==0 || board.dataset.busy || pointers.size)return;
-      if(event.pointerType==="touch" && !event.target.closest(".planning-handle"))return;
+      if(event.button!==0 || !event.isPrimary || board.dataset.busy || pointers.size || board.querySelector(".planning-card.dragging"))return;
+      const touch=event.pointerType==="touch";
       event.preventDefault();stopAnimation();node.setPointerCapture(event.pointerId);node.classList.add("dragging");
       const initial=node.getBoundingClientRect(),grab={x:(event.clientX-initial.left)/initial.width,y:(event.clientY-initial.top)/initial.height};
-      const ghost=node.cloneNode(true);ghost.classList.remove("placed-card","dragging");ghost.classList.add("planning-ghost");ghost.setAttribute("aria-hidden","true");document.body.append(ghost);
-      let point=null,inList=false,moved=false;const start={x:event.clientX,y:event.clientY};
+      const ghost=node.cloneNode(true);ghost.classList.remove("placed-card","dragging");ghost.classList.add("planning-ghost");ghost.setAttribute("aria-hidden","true");ghost.removeAttribute("data-task-id");ghost.tabIndex=-1;document.body.append(ghost);
+      let point=null,inList=false,moved=false,scrollFrame=0,lastPoint=event;const start={x:event.clientX,y:event.clientY};
       function move(e){
+        if(e.pointerId!==event.pointerId)return;
+        lastPoint=e;
         moved ||= Math.hypot(e.clientX-start.x,e.clientY-start.y)>5;
         const rect=chart.getBoundingClientRect(),bounds=sidebar.getBoundingClientRect();
         const inside=r=>e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom;
         const inChart=inside(rect);inList=inside(bounds);point=null;
         const scale=inChart?quadrantZoom:node.classList.contains("placed-card")?quadrantZoom:1;
         const width=inChart?PLANNING_CARD.width*scale:initial.width,height=inChart?PLANNING_CARD.height*scale:initial.height;
-        const left=e.clientX-grab.x*width,top=e.clientY-grab.y*height;
+        // On touch, the finger identifies the destination quadrant, regardless of the original grab point.
+        const left=e.clientX-(touch && inChart ? .5 : grab.x)*width,top=e.clientY-(touch && inChart ? .5 : grab.y)*height;
         if(inChart){
           const x=(left+width/2-rect.left-rect.width/2-quadrantPan.x)/quadrantZoom,y=(rect.top+rect.height/2+quadrantPan.y-top-height/2)/quadrantZoom;
           if(Math.abs(x)>=PLANNING_CARD.width/2+PLANNING_CARD.gap && Math.abs(y)>=PLANNING_CARD.height/2+PLANNING_CARD.gap)point={x,y};
@@ -171,12 +176,26 @@ function renderQuadrants(){
         labels.forEach(label=>{label.node.classList.toggle("drop-active",label.q===q);label.node.setAttribute("aria-hidden",String(label.q!==q));});
         feedback.textContent=q?`${q.title}，松手放置`:inList?"松手移回待安排":"不能放在坐标轴上";
       }
+      function scroll(){
+        if(!node.isConnected){finish({type:"pointercancel",pointerId:event.pointerId});return;}
+        if(moved){
+          const height=window.visualViewport?.height || innerHeight,y=lastPoint.clientY;
+          const delta=y<64?-Math.min(14,(64-y)/4):y>height-64?Math.min(14,(y-height+64)/4):0;
+          if(delta){window.scrollBy(0,delta);move(lastPoint);}
+        }
+        scrollFrame=requestAnimationFrame(scroll);
+      }
       function finish(e){
+        if(e.pointerId!==event.pointerId)return;
+        if(e.type==="pointerup")move(e);
+        cancelAnimationFrame(scrollFrame);
         node.removeEventListener("pointermove",move);node.removeEventListener("pointerup",finish);node.removeEventListener("pointercancel",finish);node.removeEventListener("lostpointercapture",finish);
+        if(node.hasPointerCapture(event.pointerId))node.releasePointerCapture(event.pointerId);
         ghost.remove();node.classList.remove("dragging");chart.querySelectorAll(".drop-active").forEach(el=>el.classList.remove("drop-active"));labels.forEach(label=>label.node.setAttribute("aria-hidden","true"));sidebar.classList.remove("drop-active");feedback.textContent="";
         if(e.type==="pointerup" && moved && (point || inList))placeCard(task,inList?null:point.x,inList?null:point.y);
+        else if(e.type==="pointerup" && !moved && touch)openTask(task);
       }
-      node.addEventListener("pointermove",move);node.addEventListener("pointerup",finish);node.addEventListener("pointercancel",finish);node.addEventListener("lostpointercapture",finish);move(event);
+      node.addEventListener("pointermove",move);node.addEventListener("pointerup",finish);node.addEventListener("pointercancel",finish);node.addEventListener("lostpointercapture",finish);move(event);scrollFrame=requestAnimationFrame(scroll);
     };
     return node;
   }
