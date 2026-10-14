@@ -30,7 +30,7 @@ try{
   await page.locator('[data-view=quadrants]').tap();
   const touch=await context.newCDPSession(page);
   const send=(type,points)=>touch.send('Input.dispatchTouchEvent',{type,touchPoints:points});
-  const idle=()=>page.waitForFunction(()=>!document.getElementById('board').dataset.busy && !document.querySelector('.camera-moving'));
+  const idle=()=>page.waitForFunction(()=>!quadrantWrites.size && !document.getElementById('board').dataset.busy && !document.querySelector('.camera-moving'));
   const center=box=>({x:box.x+box.width/2,y:box.y+box.height/2});
   async function move(from,to){for(let i=1;i<=12;i++){await send('touchMove',[{x:from.x+(to.x-from.x)*i/12,y:from.y+(to.y-from.y)*i/12}]);await page.waitForTimeout(16);}}
   // End a deliberate drag at rest, so the next tap tests activation rather than stopping a fling.

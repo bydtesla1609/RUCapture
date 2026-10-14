@@ -2,6 +2,7 @@
 let quadrantPositions={},quadrantZoom=null,focusSessions=[],focusEditor=null,focusLoading=false,focusClockOffset=0,focusPending=null;
 let focusDraft=null,focusDuration=1500,focusActionBusy=false,focusClockKey="",focusRetryAt=0,focusPrompted=null;
 let quadrantPan={x:0,y:0},quadrantResize=null;
+const quadrantWrites=new Map();let quadrantUpdate=null,quadrantRefreshNeeded=false;
 const QUADRANTS=[{x:1,y:1,title:"紧急且重要"},{x:1,y:-1,title:"紧急且不重要"},{x:-1,y:1,title:"不紧急且重要"},{x:-1,y:-1,title:"不紧急且不重要"}];
 const pendingCards=()=>tasks.filter(task=>task.category!=="课程" && task.status!=="done" && !task.archived_at);
 const quadrantOf=(x,y)=>QUADRANTS.find(q=>Math.sign(x)===q.x && Math.sign(y)===q.y);
@@ -18,17 +19,36 @@ const PLANNING_CARD={width:254,height:90,gap:12};
 // Legacy normalized positions stay in their quadrants; new positions use an unbounded plane.
 const quadrantPoint=p=>p.space==="world"?p:{x:Math.sign(p.x)*(145+Math.abs(p.x)*200),y:Math.sign(p.y)*(63+Math.abs(p.y)*160)};
 async function placeCard(task,x,y){
-  const board=$("board");board.dataset.busy="true";
-  try{quadrantPositions[task.id]=await api(`/api/quadrant/${task.id}`,"PUT",{revision:quadrantPositions[task.id]?.revision || 0,x,y,space:"world"});}
-  catch(error){notice(error.message);}
-  finally{delete board.dataset.busy;if(categoryFilter==="全部" && overviewView==="quadrants")renderQuadrants();await refresh();}
+  const previous=quadrantPositions[task.id],next={x,y,space:"world"},session=syncSession;
+  // Discard any refresh snapshot taken before this local move.
+  refreshSequence++;syncBusy=false;
+  quadrantPositions[task.id]={...previous,...next};quadrantUpdate?.(task.id);
+  const pending=quadrantWrites.get(task.id);if(pending){pending.next=next;return;}
+  // Keep only the latest destination while this card's previous position is saving.
+  const write={saved:previous,next};quadrantWrites.set(task.id,write);
+  try{
+    while(write.next){
+      const target=write.next;write.next=null;
+      const saved=await api(`/api/quadrant/${task.id}`,"PUT",{revision:write.saved?.revision || 0,...target});
+      if(session!==syncSession)return;
+      write.saved=saved;quadrantPositions[task.id]={...saved,...(write.next || {})};
+    }
+  }catch(error){
+    if(session!==syncSession)return;
+    if(write.saved)quadrantPositions[task.id]=write.saved;else delete quadrantPositions[task.id];
+    quadrantUpdate?.(task.id);quadrantRefreshNeeded=true;notice(`位置未保存，已还原。${error.message}`);
+  }finally{
+    if(quadrantWrites.get(task.id)===write)quadrantWrites.delete(task.id);
+    if(session===syncSession && !quadrantWrites.size && quadrantRefreshNeeded){quadrantRefreshNeeded=false;await refresh();}
+  }
 }
 function renderQuadrants(){
   quadrantResize?.disconnect();
   const board=$("board");board.className="quadrant-board";
   const sidebar=element("section",null,"planning-pending"),list=element("div",null,"compact-task-list planning-list");
   const items=pendingCards().sort(byPlanningTime),unplaced=items.filter(task=>quadrantPositions[task.id]?.x==null);
-  sidebar.append(element("h3",`待安排 · ${unplaced.length}`),element("p","左右滑动列表，向下拖动卡片到象限；轻点卡片可编辑。","hint planning-touch-help"),list);
+  const heading=element("h3",`待安排 · ${unplaced.length}`),empty=element("p",items.length?"卡片都已安排。":"还没有待处理卡片。","hint");
+  sidebar.append(heading,element("p","左右滑动列表，向下拖动卡片到象限；轻点卡片可编辑。","hint planning-touch-help"),list);
   const viewport=element("div",null,"axes-canvas quadrant-viewport"),chart=element("section",null,"quadrant-chart"),world=element("div",null,"quadrant-world");chart.setAttribute("aria-label","紧急性与重要性坐标图");
   const offscreen=element("div",null,"quadrant-offscreen"),panels=[],labels=[],axisY=element("span","重要性 ↑","quadrant-axis axis-y"),axisX=element("span","紧急性 →","quadrant-axis axis-x");
   for(const q of QUADRANTS){
@@ -40,7 +60,7 @@ function renderQuadrants(){
   const controls=element("div",null,"canvas-controls"),zoomOut=element("button","−"),zoomReset=element("button","复位"),zoomIn=element("button","＋");
   for(const [button,label] of [[zoomOut,"缩小象限画布"],[zoomReset,"复位象限画布"],[zoomIn,"放大象限画布"]]){button.type="button";button.setAttribute("aria-label",label);}
   const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));
-  let frame=0,animation=0;const pointers=new Map(),markerNodes=new Map();
+  let frame=0,animation=0;const pointers=new Map(),markerNodes=new Map(),cardNodes=new Map();
   function paint(){
     frame=0;if(!viewport.isConnected)return;
     const {width,height}=chart.getBoundingClientRect(),ox=width/2+quadrantPan.x,oy=height/2+quadrantPan.y;
@@ -153,12 +173,15 @@ function renderQuadrants(){
       const touch=event.pointerType==="touch";
       event.preventDefault();stopAnimation();node.setPointerCapture(event.pointerId);node.classList.add("dragging");
       const initial=node.getBoundingClientRect(),grab={x:(event.clientX-initial.left)/initial.width,y:(event.clientY-initial.top)/initial.height};
-      const ghost=node.cloneNode(true);ghost.classList.remove("placed-card","dragging");ghost.classList.add("planning-ghost");ghost.setAttribute("aria-hidden","true");ghost.removeAttribute("data-task-id");ghost.tabIndex=-1;document.body.append(ghost);
-      let point=null,inList=false,moved=false,scrollFrame=0,lastPoint=event;const start={x:event.clientX,y:event.clientY};
+      const ghost=node.cloneNode(true);ghost.classList.remove("placed-card","dragging");ghost.classList.add("planning-ghost");ghost.setAttribute("aria-hidden","true");ghost.removeAttribute("data-task-id");ghost.style.left=ghost.style.top="0px";ghost.tabIndex=-1;document.body.append(ghost);
+      let point=null,inList=false,moved=false,scrollFrame=0,lastPoint=event,dragDirty=true;const start={x:event.clientX,y:event.clientY};
       function move(e){
         if(e.pointerId!==event.pointerId)return;
-        lastPoint=e;
+        lastPoint=e;dragDirty=true;
         moved ||= Math.hypot(e.clientX-start.x,e.clientY-start.y)>5;
+      }
+      function paintDrag(){
+        const e=lastPoint;dragDirty=false;
         const rect=chart.getBoundingClientRect(),bounds=sidebar.getBoundingClientRect();
         const inside=r=>e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom;
         const inChart=inside(rect);inList=inside(bounds);point=null;
@@ -170,9 +193,9 @@ function renderQuadrants(){
           const x=(left+width/2-rect.left-rect.width/2-quadrantPan.x)/quadrantZoom,y=(rect.top+rect.height/2+quadrantPan.y-top-height/2)/quadrantZoom;
           if(Math.abs(x)>=PLANNING_CARD.width/2+PLANNING_CARD.gap && Math.abs(y)>=PLANNING_CARD.height/2+PLANNING_CARD.gap)point={x,y};
         }
-        ghost.style.width=`${width/scale}px`;ghost.style.height=`${height/scale}px`;ghost.style.transform=`scale(${scale})`;ghost.style.left=`${left}px`;ghost.style.top=`${top}px`;
+        ghost.style.width=`${width/scale}px`;ghost.style.height=`${height/scale}px`;ghost.style.transform=`translate3d(${left}px,${top}px,0) scale(${scale})`;
         const q=point?quadrantOf(point.x,point.y):null;
-        chart.querySelectorAll(".quadrant").forEach(panel=>panel.classList.toggle("drop-active",panel.dataset.quadrant===q?.title));sidebar.classList.toggle("drop-active",inList);
+        panels.forEach(panel=>panel.node.classList.toggle("drop-active",panel.q===q));sidebar.classList.toggle("drop-active",inList);
         labels.forEach(label=>{label.node.classList.toggle("drop-active",label.q===q);label.node.setAttribute("aria-hidden",String(label.q!==q));});
         feedback.textContent=q?`${q.title}，松手放置`:inList?"松手移回待安排":"不能放在坐标轴上";
       }
@@ -181,30 +204,45 @@ function renderQuadrants(){
         if(moved){
           const height=window.visualViewport?.height || innerHeight,y=lastPoint.clientY;
           const delta=y<64?-Math.min(14,(64-y)/4):y>height-64?Math.min(14,(y-height+64)/4):0;
-          if(delta){window.scrollBy(0,delta);move(lastPoint);}
+          if(delta){window.scrollBy(0,delta);dragDirty=true;}
         }
+        if(dragDirty)paintDrag();
         scrollFrame=requestAnimationFrame(scroll);
       }
       function finish(e){
         if(e.pointerId!==event.pointerId)return;
-        if(e.type==="pointerup")move(e);
+        if(e.type==="pointerup"){move(e);paintDrag();}
         cancelAnimationFrame(scrollFrame);
         node.removeEventListener("pointermove",move);node.removeEventListener("pointerup",finish);node.removeEventListener("pointercancel",finish);node.removeEventListener("lostpointercapture",finish);
         if(node.hasPointerCapture(event.pointerId))node.releasePointerCapture(event.pointerId);
         ghost.remove();node.classList.remove("dragging");chart.querySelectorAll(".drop-active").forEach(el=>el.classList.remove("drop-active"));labels.forEach(label=>label.node.setAttribute("aria-hidden","true"));sidebar.classList.remove("drop-active");feedback.textContent="";
         if(e.type==="pointerup" && moved && (point || inList))placeCard(task,inList?null:point.x,inList?null:point.y);
-        else if(e.type==="pointerup" && !moved && touch)openTask(task);
+        else{quadrantUpdate?.(task.id);if(e.type==="pointerup" && !moved && touch)openTask(task);}
       }
-      node.addEventListener("pointermove",move);node.addEventListener("pointerup",finish);node.addEventListener("pointercancel",finish);node.addEventListener("lostpointercapture",finish);move(event);scrollFrame=requestAnimationFrame(scroll);
+      node.addEventListener("pointermove",move);node.addEventListener("pointerup",finish);node.addEventListener("pointercancel",finish);node.addEventListener("lostpointercapture",finish);paintDrag();scrollFrame=requestAnimationFrame(scroll);
     };
     return node;
   }
   for(const task of items){
-    const p=quadrantPositions[task.id],node=row(task);
+    const p=quadrantPositions[task.id],node=row(task);cardNodes.set(task.id,node);
     if(p?.x==null)list.append(node);
     else{const point=quadrantPoint(p);node.classList.add("placed-card");node.style.left=`${point.x-PLANNING_CARD.width/2}px`;node.style.top=`${-point.y-PLANNING_CARD.height/2}px`;world.append(node);}
   }
-  if(!unplaced.length)list.append(element("p",items.length?"卡片都已安排。":"还没有待处理卡片。","hint"));
+  list.append(empty);empty.hidden=!!unplaced.length;
+  quadrantUpdate=id=>{
+    if(!viewport.isConnected)return;
+    const node=cardNodes.get(id);if(!node || node.classList.contains("dragging"))return;
+    const p=quadrantPositions[id];
+    if(p?.x==null){
+      node.classList.remove("placed-card");node.style.removeProperty("left");node.style.removeProperty("top");
+      const next=items.slice(items.findIndex(task=>task.id===id)+1).map(task=>cardNodes.get(task.id)).find(card=>card.parentElement===list);
+      list.insertBefore(node,next || empty);
+    }else{
+      const point=quadrantPoint(p);node.classList.add("placed-card");node.style.left=`${point.x-PLANNING_CARD.width/2}px`;node.style.top=`${-point.y-PLANNING_CARD.height/2}px`;
+      if(node.parentElement!==world)world.append(node);
+    }
+    const count=items.filter(task=>quadrantPositions[task.id]?.x==null).length;heading.textContent=`待安排 · ${count}`;empty.hidden=!!count;draw();
+  };
 }
 const focusNow=()=>Date.now()+focusClockOffset;
 const activeFocus=()=>focusSessions.find(item=>item.state==="paused" || !item.finalized && (item.state==="running" || item===focusSessions[0]));
@@ -233,6 +271,7 @@ function clearFocusEditor(){
   $("save-task").textContent="保存卡片";
 }
 function resetPlanning(){
+  quadrantWrites.clear();quadrantUpdate=null;quadrantRefreshNeeded=false;
   clearFocusEditor();quadrantPositions={};quadrantZoom=null;quadrantPan={x:0,y:0};quadrantResize?.disconnect();focusSessions=[];focusDraft=null;focusDuration=1500;focusLoading=false;focusActionBusy=false;focusPending=null;focusRetryAt=0;focusPrompted=null;
   $("focus-countdown").textContent="";$("focus-button").classList.remove("focus-paused");
 }

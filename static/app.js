@@ -1064,13 +1064,14 @@ function renderSources() {
 }
 async function refresh({poll=false}={}) {
   if(poll && (syncBusy || !navigator.onLine))return;
+  if(quadrantWrites.size){if(!poll)quadrantRefreshNeeded=true;return;}
   if (hasDraft() || $("action-confirm-dialog").open || document.querySelector(".checklist[data-busy]")) return;
   const sequence = ++refreshSequence,session=syncSession;syncBusy=true;
   try {
     const incremental=poll && syncRevision!==null && Date.now()-lastFullSync<600000;
     const data = await api(`/api/sync${incremental?`?revision=${encodeURIComponent(syncRevision)}`:""}`);
     if(session!==syncSession)return;
-    if (sequence !== refreshSequence || hasDraft() || $("action-confirm-dialog").open || document.querySelector(".checklist[data-busy]")) return;
+    if (sequence !== refreshSequence || hasDraft() || quadrantWrites.size || $("action-confirm-dialog").open || document.querySelector(".checklist[data-busy]")) return;
     $("login").hidden = true; $("workspace").hidden = false;
     if(data.cloud)checkCloud(data.cloud);
     if(data.unread!==undefined && typeof applyCommunityUnread==="function")applyCommunityUnread(data.unread);

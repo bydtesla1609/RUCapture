@@ -148,7 +148,7 @@ dialog#sources-dialog.demo-preview,#sources-dialog.demo-preview .guide-step{anim
 .compact-task-info{display:block;min-width:0;flex:1;line-height:1.45}.compact-task-info strong{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
 .compact-task-meta{display:flex;align-items:center;gap:8px;font-size:11px;color:#aeb3d1}.compact-task-type{color:#d7ceff;background:#ad99ff12;border-radius:4px;padding:0 5px}
 .compact-task-info .compact-task-time{display:block;color:#a5adcc;font-size:11px;margin-top:5px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.planning-handle{display:grid;place-items:center;min-height:44px;width:14px;flex:none;color:var(--accent);touch-action:none;cursor:grab;font-size:20px}.planning-card.dragging{opacity:.25}
+.planning-handle{display:grid;place-items:center;min-height:44px;width:14px;flex:none;color:var(--accent);touch-action:none;cursor:grab;font-size:20px}.planning-card.dragging{opacity:0}
 .quadrant-viewport{height:var(--planning-height);isolation:isolate;touch-action:none;cursor:grab;overscroll-behavior:contain}
 .quadrant-viewport.panning,.quadrant-viewport.panning *{cursor:grabbing}.quadrant-viewport.camera-moving .quadrant-world{will-change:transform}
 .quadrant-chart{position:absolute;inset:0;background-color:#14172d;background-image:linear-gradient(#a79bff09 1px,transparent 1px),linear-gradient(90deg,#a79bff09 1px,transparent 1px);background-size:26px 26px;background-position:center;user-select:none}
@@ -164,7 +164,7 @@ dialog#sources-dialog.demo-preview,#sources-dialog.demo-preview .guide-step{anim
 .quadrant-axis{position:absolute;z-index:3;background:#14172d;padding:1px 6px;color:#bfb7e9;font-size:12px;pointer-events:none}.axis-y{top:5px;left:50%;transform:translateX(-50%)}.axis-x{right:9px;top:50%;transform:translateY(-50%)}
 .quadrant-axis.axis-offscreen{color:#9290aa}.quadrant-viewport .canvas-controls{z-index:4;cursor:default}
 .quadrant-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.planning-ghost{position:fixed;z-index:1000;pointer-events:none;opacity:.97;transform-origin:top left;box-shadow:0 12px 40px #0008}
+.planning-ghost{position:fixed;left:0;top:0;will-change:transform;z-index:1000;pointer-events:none;opacity:.97;transform-origin:top left;box-shadow:0 12px 40px #0008}
 /* Focus uses the same three-line cards and an adjustable digital clock. */
 #focus-button{gap:13px}#focus-button>span:first-of-type{white-space:nowrap}
 #focus-countdown{margin-left:auto;font-size:12px;color:var(--mint);font-variant-numeric:tabular-nums;white-space:nowrap;flex:none;transition:color .18s}#focus-countdown:empty{display:none}#focus-button.focus-paused #focus-countdown{color:var(--coral)}

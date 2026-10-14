@@ -30,7 +30,7 @@ try{
     await refresh();
   });
   await page.locator('[data-view=quadrants]').click();assert.equal(await page.locator('.planning-list .planning-card').count(),2);
-  const idle=()=>page.waitForFunction(()=>!document.getElementById('board').dataset.busy && !document.querySelector('.camera-moving'));
+  const idle=()=>page.waitForFunction(()=>!quadrantWrites.size && !document.getElementById('board').dataset.busy && !document.querySelector('.camera-moving'));
   async function zoomOut(){await page.getByRole('button',{name:'缩小象限画布',exact:true}).click();await idle();}
   async function directionLabels(){
     const viewport=await page.locator('.quadrant-chart').boundingBox(),labels=await page.locator('.quadrant-direction.drop-active,.quadrant-axis').evaluateAll(nodes=>nodes.map(node=>{const {x,y,width,height}=node.getBoundingClientRect();return {x,y,width,height};}));
@@ -46,6 +46,7 @@ try{
     const {scale,pan}=await page.evaluate(()=>({scale:quadrantZoom,pan:quadrantPan})),width=254*scale,height=90*scale;
     const target={x:plot.x+plot.width/2+pan.x+x*scale+width*(.33-.5),y:plot.y+plot.height/2+pan.y-y*scale+height*(.6-.5)};
     await page.mouse.move(from.x+from.width*.33,from.y+from.height*.6);await page.mouse.down();await page.mouse.move(target.x,target.y,{steps:15});
+    await page.evaluate(()=>new Promise(requestAnimationFrame));
     const ghost=await page.locator('.planning-ghost').boundingBox();assert.ok(Math.abs(ghost.x+ghost.width*.33-target.x)<1,'pointer retains its horizontal grab point');assert.ok(Math.abs(ghost.y+ghost.height*.6-target.y)<1,'pointer retains its vertical grab point');
     await page.mouse.up();await idle();await page.waitForFunction(ghost=>{const placed=document.querySelector('.placed-card')?.getBoundingClientRect();return placed && Math.abs(placed.x-ghost.x)<1 && Math.abs(placed.y-ghost.y)<1;},ghost);
   }
