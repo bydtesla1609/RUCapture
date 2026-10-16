@@ -1,16 +1,17 @@
 (() => {
   const source=({"k.ruc.edu.cn":"weilai","ruc.thusaac.com":"tuoj","yoj.ruc.edu.cn":"yoj"})[location.hostname] || (location.hostname==="www.zhifz.com"?"zhifz":location.hostname==="smartestu.cn"?"smartestu":location.hostname==="www.ketangpai.com"?"ketangpai":/(^|\.)chaoxing\.com$/.test(location.hostname)?"chaoxing":null);
   if(!source) return;
-  let seen=false,running=false,navigated=false,lastDocument="",managed=false,cloudEnabled=false;
-  const send=(tasks,error)=>chrome.runtime.sendMessage({type:"capture",source,tasks,...(error?{error}:{})}).catch(()=>{});
+  let seen=false,running=false,navigated=false,lastDocument="",managed=false,cloudEnabled=false,enabled=false,contextSequence=0;
+  const send=(tasks,error)=>enabled?chrome.runtime.sendMessage({type:"capture",source,tasks,...(error?{error}:{})}).catch(()=>{}):Promise.resolve({skipped:true});
   async function readYOJ() {
-    if(source!=="yoj" || running)return;
+    if(!enabled || source!=="yoj" || running)return;
     running=true;
     try {
       const first=RUCLists.yoj(document,location.href);
       if(first===null){if(/\/index\.php\/index\/course\/(?:detail|index)/.test(location.pathname))throw new Error("YOJ 课程结构未识别，请打开作业列表后同步");return;}
       const tasks=new Map(first.tasks.map(task=>[task.external_id,task])),visited=new Set([location.href]),pending=[...first.pages];
       while(pending.length) {
+        if(!enabled)return;
         const url=pending.shift();if(visited.has(url))continue;
         if(visited.size>=25)throw new Error("YOJ 课程页面较多，请添加具体课程链接同步");
         visited.add(url);
@@ -34,7 +35,7 @@
     send(event.data.tasks,event.data.error);
   });
   async function readLearning() {
-    if(source!=="chaoxing" || running) return;
+    if(!enabled || source!=="chaoxing" || running) return;
     const listRoute=/\/work\/(list|all-task)(?:\?|$)/.test(location.href);
     if(!listRoute) {
       const tab=[...document.querySelectorAll("a[data-url]")].find(node=>node.textContent.trim()==="作业");
@@ -53,6 +54,7 @@
       const total=Math.max(1,...pageNumbers);
       if(total>50) throw new Error("学习通作业超过 50 页，请分课程同步");
       for(let page=1;page<=total;page++) {
+        if(!enabled)return;
         const url=new URL(location.href);
         if(page===Number(url.searchParams.get("pageNum") || 1)) continue;
         url.searchParams.set("pageNum",page);
@@ -74,14 +76,26 @@
     new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(readLearning,600);}).observe(document.body,{childList:true,subtree:true,characterData:true});
   }
   if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",observe,{once:true});else observe();
-  chrome.runtime.sendMessage({type:"collection-context"}).then(result=>{
-    managed=!!result?.managed;cloudEnabled=!!result?.cloudEnabled;
-    globalThis.RUCaptureStatus?.update({enabled:!!result?.enabled});
+  async function updateContext(refresh=false,reopen=false){
+    if(reopen)globalThis.RUCaptureStatus?.update({reopen:true});
+    const sequence=++contextSequence;
+    const result=await chrome.runtime.sendMessage({type:"collection-context",refresh}).catch(()=>({enabled:false,cloudEnabled:false}));
+    if(sequence!==contextSequence)return;
+    const wasEnabled=enabled;managed=!!result?.managed;cloudEnabled=!!result?.cloudEnabled;enabled=!!result?.enabled;
+    if(wasEnabled!==enabled)lastDocument="";
+    globalThis.RUCaptureStatus?.update({enabled,statusVisible:result?.statusVisible!==false,reopen});
     window.postMessage({kind:"campus-cloud-mode",enabled:cloudEnabled,browserEnabled:!!result?.enabled},location.origin);
     window.postMessage({kind:"campus-ruc-mode",enabled:!!result?.enabled,cloudEnabled},location.origin);
-    if(result?.enabled){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",readYOJ,{once:true});else readYOJ();}
+    if(enabled && !wasEnabled){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",readYOJ,{once:true});else readYOJ();}
     readLearning();
-  }).catch(()=>{});
+  }
+  updateContext(true);
+  chrome.storage.onChanged.addListener((changes,area)=>{
+    if(area!=="local")return;
+    const relevant=Object.keys(changes).some(key=>["boardURL","account","token","enabled","configuredSources","cloudEnabled","cloudZhifzEnabled","cloudRucListsEnabled"].includes(key) || key.startsWith("source-status-dismissed:"));
+    if(relevant)updateContext(false,Object.entries(changes).some(([key,value])=>key.endsWith(`|${source}`) && key.startsWith("source-status-dismissed:") && value.newValue===false));
+  });
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)updateContext(true);});
   chrome.runtime.onMessage.addListener(message=>{
     if(message.type==="collection-result" && message.source===source)globalThis.RUCaptureStatus?.update({error:message.error || '',message:message.error?'':`已读取 ${message.count || 0} 项，已同步到看板。`,tasks:message.tasks || []});
     if(message.type==="read-current") {

@@ -69,7 +69,7 @@ test("Zhifz browser collection preserves list headers for the other tab, accepts
       open(){} setRequestHeader(){} addEventListener(type,listener){this.listener=listener;}
       send(){this.status=200;this.responseText=JSON.stringify(latest);this.listener();}
     }
-    const window={addEventListener(){},postMessage:value=>messages.push(value),fetch:async(url,options)=>{
+    const window={addEventListener(type,listener){this.listener=listener;},postMessage:value=>messages.push(value),fetch:async(url,options)=>{
       const states=JSON.parse(new URL(url).searchParams.get("状态"));calls.push(states);
       const headers=new Headers(options?.headers);
       // Both list requests must retain the same observed Angular request headers.
@@ -79,6 +79,7 @@ test("Zhifz browser collection preserves list headers for the other tab, accepts
     }};window.top=window;
     const context=vm.createContext({window,location:new URL(SOURCES.zhifz.url),XMLHttpRequest:XHR,URL,URLSearchParams,Request,Headers,AbortSignal,Map,WeakMap});
     for(const name of ["cloud-routes.js","parsers.js","capture.js"])vm.runInContext(await readFile(new URL(`./extension/${name}`,import.meta.url),"utf8"),context);
+    window.listener({source:window,origin:new URL(SOURCES.zhifz.url).origin,data:{kind:"campus-cloud-mode",browserEnabled:true,enabled:false}});
     if(xhr){const req=new XHR();req.open("GET",list([0,1]));req.setRequestHeader("Accept","application/json");req.setRequestHeader("X-XSRF-TOKEN","synthetic-only");req.send();}
     else await window.fetch(list([0,1]),{headers:{accept:"application/json","x-xsrf-token":"synthetic-only"}});
     for(let i=0;i<50 && !messages.length;i++)await new Promise(resolve=>setTimeout(resolve,10));

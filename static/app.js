@@ -927,6 +927,7 @@ async function saveWebsiteLinks(urls,submitted=null) {
   if(websiteBusy)return;websiteBusy=true;$("save-source-link").disabled=true;renderWebsiteLinks();
   try {
     const data=await api("/api/source-links","PUT",{urls});sourceLinksState=data.links;closeWebsiteInput();renderSources();
+    if(collectorState?.connected && collectorState.sourceStatusControls)await collectorCommand("refresh-sources");
     const added=submitted?data.links.find(link=>link.url===new URL(submitted).href):null;
     $("source-links-result").textContent=added?.generic?"链接已保存。请打开“识别设置”，核对要导入的内容。":"网站配置已保存。";
     if(added?.generic){await refresh();if(collectorState?.connected){try{await setupGeneric(added);}catch(error){$("source-links-result").textContent=error.message;}}return;}

@@ -102,6 +102,16 @@ try{
   assert.equal(await iframe.locator('body').evaluate(body=>body.scrollWidth<=innerWidth+1),true,JSON.stringify(await iframe.locator('body').evaluate(body=>({width:innerWidth,scroll:body.scrollWidth,zoom:getComputedStyle(frameElement || body).zoom}))));
  }
  await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);assert.ok(await iframe.locator('body').evaluate(b=>parseFloat(getComputedStyle(b).fontSize))*1.5>=15);await page.screenshot({path:'data/screenshots/sync-step-mobile.png',animations:'disabled'});
+ // The real settings UI must notify existing teaching-site tabs without running another scan.
+ await goStep(2);await page.locator('#collector-enabled').check();await page.waitForFunction(()=>collectorState?.enabled);
+ const teaching=context.pages().find(p=>p.url().startsWith('https://smartestu.cn/'));assert.ok(teaching);
+ await teaching.locator('#rucapture-source-status').waitFor();
+ await page.locator('#collector-enabled').uncheck();await teaching.locator('#rucapture-source-status').waitFor({state:'hidden'});
+ await page.locator('#collector-enabled').check();await teaching.locator('#rucapture-source-status').waitFor();
+ await goStep(3);await page.getByRole('button',{name:'移除网站：SmartEstu',exact:true}).click();await page.locator('#action-confirm-accept').click();
+ await page.waitForFunction(()=>!websiteBusy && sourceLinksState?.every(link=>link.source!=='smartestu'));
+ await teaching.locator('#rucapture-source-status').waitFor({state:'hidden'});
+ assert.equal(await sw.evaluate(async()=>(await chrome.storage.local.get('configuredSources')).configuredSources.includes('smartestu')),false);
  assert.deepEqual(errors,[]);console.log('PASS: real embedded extension, five-step transitions, opt-in/denial/retry, account checks, no new settings tab, manual progress, version reset, sync execution independent of results, and mobile layout.');
 }finally{
  await context?.close();database.close();if(dirname(resolve(dir))!==root)throw Error('Unsafe test cleanup path');await rm(dir,{recursive:true,force:true});

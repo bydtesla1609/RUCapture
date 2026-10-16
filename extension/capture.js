@@ -2,10 +2,13 @@
   if(window.top!==window) return;
   const source=location.hostname==="smartestu.cn" ? "smartestu":location.hostname==="www.zhifz.com"?"zhifz":"ketangpai";
   const collected=new Map();
-  let cloudEnabled=false,browserEnabled=false,zhifzSequence=0,lastRead,reading=false;
+  let cloudEnabled=false,browserEnabled=false,zhifzSequence=0,lastRead,reading=false,pending;
   window.addEventListener("message",async event=>{
     if(event.source!==window || event.origin!==location.origin)return;
-    if(event.data?.kind==='campus-cloud-mode'){cloudEnabled=event.data.enabled===true;browserEnabled=event.data.browserEnabled===true;}
+    if(event.data?.kind==='campus-cloud-mode'){
+      cloudEnabled=event.data.enabled===true;browserEnabled=event.data.browserEnabled===true;
+      if((browserEnabled || cloudEnabled) && pending){const value=pending;pending=null;publish(...value);}
+    }
     if(event.data?.kind!=='campus-read-current' || !browserEnabled || !lastRead || reading)return;
     reading=true;
     try{
@@ -22,6 +25,7 @@
   const allowed=(url,method="GET")=>source==="zhifz"?String(method).toUpperCase()==="GET" && CampusCloudRoutes.source(new URL(url,location.href).href)==="zhifz":source==="smartestu" ? /\/api\/homework\/student\/mark\/queryHomeworks(?:\?|$)/.test(url) : /\/(?:FutureV2\/CourseMeans\/getCourseContent|Futurev2\/Homework\/getListByCourseToStudent)(?:\?|$)/i.test(url);
   async function publish(url,value,request) {
     if(request)lastRead=request;
+    if(!browserEnabled && !cloudEnabled){pending=[url,value,request];return;}
     const sequence=source==="zhifz"?++zhifzSequence:0;
     try {
       const tasks=CampusParsers.parse(source,url,value,location.href);

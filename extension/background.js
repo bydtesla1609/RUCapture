@@ -16,6 +16,36 @@ function sourceFor(url) {
   return ({"yoj.ruc.edu.cn":"yoj","k.ruc.edu.cn":"weilai","ruc.thusaac.com":"tuoj"})[host] || (host==="www.zhifz.com"?"zhifz":host==="smartestu.cn"?"smartestu":host==="www.ketangpai.com"?"ketangpai":/(^|\.)chaoxing\.com$/.test(host)?"chaoxing":null);
 }
 let queue=Promise.resolve(),cloudQueue=Promise.resolve(),scanning=null;
+const statusKey=(data,source)=>`source-status-dismissed:${data.boardURL}|${data.account || "personal"}|${source}`;
+async function cacheSources(configuration) {
+  const configured=(configuration.links || Object.keys(SOURCES).map(source=>({source}))).flatMap(link=>link.source==="ruc_courses"?["ruc_courses","ruc_exams"]:link.source?[link.source]:[]);
+  const {configuredSources}=await chrome.storage.local.get("configuredSources");
+  if(JSON.stringify(configuredSources)!==JSON.stringify(configured))await chrome.storage.local.set({configuredSources:configured});
+}
+let sourceConfigurationRequest;
+async function refreshSourceConfiguration() {
+  if(sourceConfigurationRequest)return sourceConfigurationRequest;
+  return sourceConfigurationRequest=(async()=>{
+    const data=await chrome.storage.local.get(["boardURL","token","account"]);
+    if(!BOARD_ORIGINS.includes(data.boardURL) || !data.token)throw new Error("请先连接看板");
+    const response=await fetch(`${data.boardURL}/api/collector-config`,{credentials:"omit",headers:{Authorization:`Bearer ${data.token}`},signal:AbortSignal.timeout(15000)});
+    if(!response.ok)throw new Error("未能刷新网站配置，请重试");
+    const configuration=await response.json(),current=await chrome.storage.local.get(["boardURL","token","account"]);
+    if(current.boardURL!==data.boardURL || current.token!==data.token || (current.account || "personal")!==(configuration.account || "personal"))throw new Error("账号连接已变化，请重试");
+    await cacheSources(configuration);
+    return configuration;
+  })().finally(()=>{sourceConfigurationRequest=null;});
+}
+async function collectionContext(sender,refresh=false) {
+  if(refresh)await refreshSourceConfiguration();
+  const data=await chrome.storage.local.get(["boardURL","token","account","managedTabs","enabled","configuredSources","cloudEnabled","cloudZhifzEnabled","cloudRucListsEnabled"]),source=sourceFor(sender.url);
+  const configured=!!data.token && (data.configuredSources || []).includes(source),key=statusKey(data,source);
+  return {managed:Object.values(data.managedTabs || {}).includes(sender.tab.id),enabled:!!data.enabled && configured,statusVisible:(await chrome.storage.local.get(key))[key]!==true,cloudEnabled:configured && !!data.cloudEnabled && (source!=="zhifz" || !!data.cloudZhifzEnabled) && (!["weilai","tuoj"].includes(source) || !!data.cloudRucListsEnabled)};
+}
+async function setStatusDismissed(source,dismissed) {
+  const data=await chrome.storage.local.get(["boardURL","account"]);
+  await chrome.storage.local.set({[statusKey(data,source)]:dismissed});
+}
 async function cloudResult(source,message) {
   const {cloudSourceResults={}}=await chrome.storage.local.get("cloudSourceResults");
   cloudSourceResults[source]=message;await chrome.storage.local.set({cloudSourceResults});
@@ -94,7 +124,7 @@ async function upload(message,sender,generic=false) {
   await chrome.action.setBadgeText({text:Object.values(sourceResults).some(value=>value.error)?"!":""});
   return {ok:true,changed};
 }
-async function performScan(force=false,academicOnly=false,onlySource,automatic=false) {
+async function performScan(force=false,academicOnly=false,onlySource,automatic=false,showStatus=false) {
   if(onlySource!==undefined && !Object.hasOwn(SOURCES,onlySource) && !onlySource.startsWith("web:"))throw new Error("未知同步来源");
   const {enabled,boardURL,token,managedTabs={},sourceURLs={},scanAttempts={},sourceResults={}}=await chrome.storage.local.get(["enabled","boardURL","token","managedTabs","sourceURLs","scanAttempts","sourceResults"]);
   if(!boardURL || !token) throw new Error("请先连接看板");
@@ -106,8 +136,8 @@ async function performScan(force=false,academicOnly=false,onlySource,automatic=f
   const entries=config.links===undefined?Object.entries(SOURCES).filter(([source])=>!["zhifz","yoj","weilai","tuoj"].includes(source) || sourceURLs[source] || configuration?.[source]).map(([source,url])=>({source,url:sourceURLs[source] || configuration?.[source]?.url || url})):
     config.links.filter(link=>link.source).flatMap(link=>link.source==="ruc_courses"?[{source:"ruc_courses",url:SOURCES.ruc_courses},{source:"ruc_exams",url:SOURCES.ruc_exams}]:[link]);
   const selected=[...new Map(entries.filter(link=>(!academicOnly || link.source.startsWith("ruc_")) && (!onlySource || link.source===onlySource)).map(link=>[link.url,link])).values()];
-  if(!selected.length)throw new Error("请在网页的第 3 步保存已适配网站的链接");
   await chrome.storage.local.set({configuredSources:[...new Set(entries.map(link=>link.source))]});
+  if(!selected.length)throw new Error("请在网页的第 3 步保存已适配网站的链接");
   for(const [index,{source,url:address}] of selected.entries()) {
     // Cloud collection does not need a browser tab. Explicit per-site recovery and grants do.
     if(!force && !onlySource && config.cloud_enabled && config.cloud_sources?.[source]?.authorized)continue;
@@ -125,6 +155,7 @@ async function performScan(force=false,academicOnly=false,onlySource,automatic=f
   }
   await chrome.storage.local.set({managedTabs});return {ok:true};
   async function visit(source,url,key) {
+    if(showStatus)await setStatusDismissed(source,false);
     let tab;try{if(managedTabs[key])tab=await chrome.tabs.get(managedTabs[key]);}catch{}
     if(automatic && sourceResults[source]?.error)return;
     if(tab){
@@ -146,9 +177,9 @@ async function performScan(force=false,academicOnly=false,onlySource,automatic=f
     }
   }
 }
-function scan(force=false,source,automatic=false) {
+function scan(force=false,source,automatic=false,showStatus=false) {
   if(scanning) return Promise.reject(new Error("正在打开同步页面，请稍后重试"));
-  return scanning=performScan(force,false,source,automatic).finally(()=>{scanning=null;});
+  return scanning=performScan(force,false,source,automatic,showStatus).finally(()=>{scanning=null;});
 }
 async function configure() {
   const {enabled}=await chrome.storage.local.get("enabled");await chrome.alarms.clear("collect");
@@ -173,15 +204,21 @@ async function boardControl(message,sender) {
   }
   const data=await chrome.storage.local.get(["boardURL","token","enabled","sourceResults","lastResult","account"]);
   const connected=data.boardURL===origin && !!data.token && (data.account || "personal")===(message.account || "personal");
-  if(message.command==="status" || message.command==="pair") return {version:chrome.runtime.getManifest().version,connected,enabled:!!data.enabled,sourceResults:connected?data.sourceResults || {}:{},lastResult:connected?data.lastResult || "":""};
+  if(message.command==="status" || message.command==="pair") return {version:chrome.runtime.getManifest().version,sourceStatusControls:true,connected,enabled:!!data.enabled,sourceResults:connected?data.sourceResults || {}:{},lastResult:connected?data.lastResult || "":""};
   if(!connected) throw new Error("请先在此看板连接扩展");
+  if(message.command==="refresh-sources"){await refreshSourceConfiguration();return {ok:true};}
+  if(message.command==="show-source-status"){
+    const source=sourceFor(message.url);
+    if(!source)return {skipped:true};
+    await setStatusDismissed(source,false);return {ok:true};
+  }
   if(message.command==="cloud-panel")return {url:chrome.runtime.getURL("cloud-panel.html")+"?"+new URLSearchParams({board:origin,account:message.account || "personal"})};
   if(message.command==="generic-setup")return genericSetup(message.url);
   if(message.command==="configure") {
     if(typeof message.enabled!=="boolean") throw new Error("同步设置不正确");
     await chrome.storage.local.set({enabled:message.enabled});return configure();
   }
-  if(message.command==="scan") return scan(false,message.source);
+  if(message.command==="scan") return scan(false,message.source,false,true);
   if(message.command==="academic-scan")return performScan(false,true);
   throw new Error("未知操作");
 }
@@ -201,7 +238,10 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     chrome.tabs.sendMessage(sender.tab.id,{type:'read-current'}).then(()=>reply({ok:true})).catch(error=>reply({error:error.message}));return true;
   }
   if(message.type==="collection-context" && sender.tab) {
-    chrome.storage.local.get(["managedTabs","enabled","configuredSources","cloudEnabled","cloudZhifzEnabled","cloudRucListsEnabled"]).then(({managedTabs={},enabled=false,configuredSources=[],cloudEnabled=false,cloudZhifzEnabled=false,cloudRucListsEnabled=false})=>{const source=sourceFor(sender.url);reply({managed:Object.values(managedTabs).includes(sender.tab.id),enabled:enabled && configuredSources.includes(source),cloudEnabled:cloudEnabled && (source!=="zhifz" || cloudZhifzEnabled) && (!["weilai","tuoj"].includes(source) || cloudRucListsEnabled)});});return true;
+    collectionContext(sender,message.refresh===true).then(reply).catch(()=>reply({enabled:false,cloudEnabled:false}));return true;
+  }
+  if(message.type==="dismiss-source-status" && sender.tab && sender.frameId===0 && sourceFor(sender.url)){
+    setStatusDismissed(sourceFor(sender.url),true).then(()=>reply({ok:true})).catch(()=>reply({error:"未能保存关闭状态"}));return true;
   }
   if(message.type==="cloud-recipe" && sender.tab) {
     const current=cloudQueue.then(()=>cloudRecipe(message,sender));cloudQueue=current.catch(error=>cloudResult(message.source,error.message));

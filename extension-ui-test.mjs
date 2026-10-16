@@ -99,6 +99,7 @@ try {
   const capture=await captureContext.newPage();await capture.goto("https://smartestu.cn/assignment");
   await capture.evaluate(()=>{window.messages=[];addEventListener("message",event=>messages.push(event.data));});
   for(const name of ["cloud-routes.js","parsers.js","capture.js"])await capture.addScriptTag({content:await readFile(new URL(name,extension),"utf8")});
+  await capture.evaluate(()=>window.postMessage({kind:"campus-cloud-mode",browserEnabled:true,enabled:false},location.origin));
   await capture.evaluate(()=>fetch("/api/homework/student/mark/queryHomeworks",{headers:{Authorization:"Bearer synthetic"}}).then(r=>r.json()));
   await capture.waitForFunction(()=>messages.some(m=>m.kind==="campus-assignments-v1"));
   assert.equal(await capture.evaluate(()=>messages.some(m=>m.kind==="campus-cloud-recipe-v1")),false);
@@ -130,6 +131,7 @@ try {
   const readZhifz=method=>capture.evaluate(method=>new Promise(resolve=>{
     const xhr=new XMLHttpRequest();xhr.open(method,"/yonghu_ceyan?"+new URLSearchParams({UID:"123",类型:"2",状态:"[0,1]"}));xhr.onload=resolve;xhr.send();
   }),method);
+  await capture.evaluate(()=>window.postMessage({kind:"campus-cloud-mode",browserEnabled:true,enabled:false},location.origin));
   await readZhifz("GET");
   await capture.waitForFunction(()=>messages.some(m=>m.kind==="campus-assignments-v1"));
   assert.deepEqual(await capture.evaluate(()=>messages.find(m=>m.kind==="campus-assignments-v1").tasks.map(task=>task.status)),["todo","done"]);
@@ -175,7 +177,7 @@ try {
     await surface.evaluate(()=>{
       window.sent=[];window.listTimeouts=[];const timer=setTimeout;
       window.setTimeout=(fn,ms,...args)=>ms===25000?listTimeouts.push(fn):timer(fn,ms,...args);
-      window.chrome={runtime:{sendMessage:async message=>{sent.push(message);return message.type==="collection-context"?{managed:true,enabled:true}:{};},onMessage:{addListener(){}}}};
+      window.chrome={storage:{onChanged:{addListener(){}}},runtime:{sendMessage:async message=>{sent.push(message);return message.type==="collection-context"?{managed:true,enabled:true}:{};},onMessage:{addListener(){}}}};
     });
     await surface.addScriptTag({content:await readFile(new URL("content.js",extension),"utf8")});
   }
