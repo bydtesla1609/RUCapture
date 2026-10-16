@@ -206,13 +206,23 @@ function sidebarState(collapsed){workspace.classList.toggle("sidebar-collapsed",
 sidebarState(localStorage.getItem("rucapture-sidebar")==="collapsed");toggle.onclick=()=>{const collapsed=!workspace.classList.contains("sidebar-collapsed");sidebarState(collapsed);localStorage.setItem("rucapture-sidebar",collapsed?"collapsed":"expanded");closeUserMenu();};
 
 const mobileNavigation=matchMedia("(max-width:900px)"),mobileToggle=$("mobile-nav-toggle"),sidebar=$("sidebar"),main=workspace.querySelector("main");
+const workspaceHeading=main.querySelector(".heading");
+workspaceHeading.prepend(mobileToggle);
+function placeWorkspaceHeading(){
+  // Keep all mobile controls in one viewport-fixed row, outside the moving main.
+  workspaceHeading.getAnimations().forEach(animation=>animation.cancel());
+  if(mobileNavigation.matches)workspace.insertBefore(workspaceHeading,main);
+  else main.insertBefore(workspaceHeading,main.querySelector(".summary"));
+  mobileSidebar(false);
+}
 function mobileSidebar(open,restoreFocus=false){
   open=mobileNavigation.matches && open;workspace.classList.toggle("mobile-nav-open",open);document.documentElement.classList.toggle("mobile-nav-open",open);
   sidebar.inert=mobileNavigation.matches && !open;main.inert=open;
+  workspaceHeading.querySelector(".add-control").inert=open;
   mobileToggle.setAttribute("aria-expanded",String(open));mobileToggle.setAttribute("aria-label",open?"收起导航":"展开导航");
   if(!open){closeUserMenu();restoreFocus ||= sidebar.contains(document.activeElement);}if(restoreFocus && mobileNavigation.matches)mobileToggle.focus({preventScroll:true});
 }
-mobileSidebar(false);mobileNavigation.addEventListener("change",()=>mobileSidebar(false));
+placeWorkspaceHeading();mobileNavigation.addEventListener("change",placeWorkspaceHeading);
 mobileToggle.onclick=()=>mobileSidebar(!workspace.classList.contains("mobile-nav-open"));
 $("mobile-nav-backdrop").onclick=()=>mobileSidebar(false,true);
 // Follow horizontal touch gestures without taking vertical scroll, form editing or canvas drags.
@@ -251,7 +261,7 @@ window.addEventListener("resize",()=>{finishNavGesture(true);navGesture=null;});
 sidebar.addEventListener("click",event=>{
   const button=event.target.closest("button");if(!mobileNavigation.matches || !button || button.id==="user-menu-toggle" || button.id==="demo-button")return;
   mobileSidebar(false);
-  if(button.closest("#categories")){main.querySelector("h1").tabIndex=-1;main.querySelector("h1").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"});}
+  if(button.closest("#categories")){$("view-title").tabIndex=-1;$("view-title").focus({preventScroll:true});window.scrollTo({top:0,behavior:"instant"});}
 });
 $("user-menu").addEventListener("click",event=>{if(event.target.closest("button:not(#effects-toggle)"))mobileSidebar(false);});
 document.addEventListener("keydown",event=>{

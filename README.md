@@ -15,6 +15,12 @@ Copyright (C) 2026 bydtesla1609。RUCapture 的原创代码采用 **GNU Affero G
 
 扩展打包命令会把 `LICENSE` 和 `COPYRIGHT` 一并放入安装包，Pages 构建也会携带这两个文件。官方说明：[GNU 为什么使用 Affero GPL](https://www.gnu.org/licenses/why-affero-gpl.html)、[GitHub 的 AGPLv3 许可摘要](https://choosealicense.com/licenses/agpl-3.0/)。
 
+## 网页 3.1.9（2026-10-16）
+
+- 手机展开键、标题、添加按钮放入同一个固定顶栏；顶栏移出会位移的主内容容器，切换板块时不再播放顶部位移动画，保留侧栏横向滑动。电脑版将同一组控件恢复到原位置。
+- 顶栏使用向下渐隐的两层模糊，去掉整块底色、边框和底部阴影；文字和按钮不参与渐隐，安全区和 44px 点击尺寸保留。
+- `npm run test:mobile-layout` 检查上下滚动、板块切换、视窗高度变化、窄屏和桌面还原；支持 Chromium / WebKit。Chromium 滚动截图用于确认渐变视觉；Windows WebKit 的滤镜渲染不等同于 iPhone 微信真机，后者尚未实测。扩展仍为 v1.9.7。
+
 ## 网页 3.1.8（2026-10-16）
 
 - 修复手机相册大照片被 1 MB 限制直接拒绝：上传前在本机缩放、压缩为 JPEG，原图不变；小文件保持原样，浏览器可解码的 HEIC 转为 JPEG。无法读取、空文件和非图片超限分别提示，失败后保留草稿与已上传部分。账号配额与附件访问保护保持不变。

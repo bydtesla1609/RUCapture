@@ -93,20 +93,35 @@ try{
       await openNav();await page.locator('#categories button').filter({has:page.locator('span',{hasText:new RegExp(`^${category}$`)})}).tap();
       for(const effects of ['on','off']){
         await page.evaluate(value=>{document.documentElement.dataset.effects=value;document.querySelector('main').style.minHeight='1800px';scrollTo(0,0);},effects);
-        const header=page.locator('main>.heading'),title=page.locator('#view-title'),add=page.locator('#add-task');
+        const header=page.locator('#workspace>.heading'),title=page.locator('#view-title'),add=page.locator('#add-task');
+        assert.ok(await nav.evaluate(node=>node.parentElement.matches('#workspace>.heading')),'toggle shares the fixed row, outside the transformed main');
         let [a,b,c,h]=await Promise.all([nav.boundingBox(),title.boundingBox(),add.boundingBox(),header.boundingBox()]);
         assert.ok(Math.abs(a.y+a.height/2-b.y-b.height/2)<2 && Math.abs(b.y+b.height/2-c.y-c.height/2)<2,`${category}/${width}/${effects}: toggle, title, add share one row`);
         assert.ok(a.x+a.width<=b.x && b.x+b.width<c.x && c.x+c.width<=width,`${category}: header controls never overlap`);
         assert.equal(Math.round(h.y),0);assert.ok(h.height<=68);
-        const glass=await header.evaluate(node=>{const s=getComputedStyle(node);return {color:s.backgroundColor,blur:s.backdropFilter||s.webkitBackdropFilter};});assert.match(glass.blur,/blur\(22px\)/);assert.ok(Number(glass.color.match(/[\d.]+/g).at(-1))<.5);
-        await page.evaluate(()=>scrollTo(0,280));await page.waitForFunction(()=>scrollY>200);
-        assert.equal(Math.round((await header.boundingBox()).y),0,`${category}: header remains pinned while content scrolls`);
+        const glass=await header.evaluate(node=>{const s=getComputedStyle(node),top=getComputedStyle(node,'::before'),bottom=getComputedStyle(node,'::after');return {position:s.position,color:s.backgroundColor,border:s.borderBottomWidth,shadow:s.boxShadow,topBlur:top.backdropFilter||top.webkitBackdropFilter,bottomBlur:bottom.backdropFilter||bottom.webkitBackdropFilter,mask:top.maskImage||top.webkitMaskImage};});
+        assert.equal(glass.position,'fixed');assert.equal(glass.color,'rgba(0, 0, 0, 0)');assert.equal(glass.border,'0px');assert.equal(glass.shadow,'none');assert.match(glass.topBlur,/blur\(32px\)/);assert.match(glass.bottomBlur,/blur\(8px\)/);assert.match(glass.mask,/linear-gradient/);assert.match(glass.mask,/rgba\(0, 0, 0, 0\)/);
+        for(const y of [180,520,280]){
+          await page.evaluate(value=>scrollTo(0,value),y);await page.waitForFunction(value=>Math.abs(scrollY-value)<2,y);
+          [a,b,c,h]=await Promise.all([nav.boundingBox(),title.boundingBox(),add.boundingBox(),header.boundingBox()]);
+          assert.equal(Math.round(h.y),0,`${category}: header stays pinned during scroll and reverse scroll`);
+          assert.ok(Math.abs(a.y+a.height/2-b.y-b.height/2)<2 && Math.abs(b.y+b.height/2-c.y-c.height/2)<2,`${category}: controls stay on one baseline after scrolling`);
+        }
+        if(width===390 && category==='记录' && effects==='on')await page.screenshot({path:`data/screenshots/mobile-layout/gradient-header-${engine.name()}-scrolled.png`});
         for(const control of [nav,add])assert.ok(await control.evaluate(node=>{const r=node.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return node===hit||node.contains(hit);}),`${category}: pinned actions remain clickable`);
       }
     }
     await page.evaluate(()=>{document.querySelector('main').style.minHeight='';scrollTo(0,0);delete document.documentElement.dataset.effects;});
     await page.screenshot({path:`data/screenshots/mobile-layout/pinned-header-${width}.png`});
   }
+  await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:390,height:724});
+  await openNav();await page.locator('#categories button').filter({has:page.locator('span',{hasText:/^作业$/})}).tap();
+  const pinnedMotion=await page.evaluate(async()=>{const rows=[];for(let i=0;i<24;i++){await new Promise(requestAnimationFrame);rows.push([mobileToggle,$('view-title'),$('add-task')].map(node=>{const r=node.getBoundingClientRect();return r.y+r.height/2;}));}return rows;});
+  assert.ok(pinnedMotion.every(row=>Math.max(...row)-Math.min(...row)<2 && Math.abs(row[0]-32)<2),'section changes never animate the fixed row vertically');
+  await page.evaluate(()=>{document.querySelector('main').style.minHeight='1800px';scrollTo(0,420);});
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(Math.round((await nav.boundingBox()).y),10,'browser-height changes keep the unified row at the top');
+  await page.evaluate(()=>{document.querySelector('main').style.minHeight='';scrollTo(0,0);});await page.emulateMedia({reducedMotion:'reduce'});
   for(const [width,height] of [[320,844],[390,844],[430,844],[768,844],[844,390]]){
     await page.setViewportSize({width,height});await fits();assert.equal(await nav.isVisible(),true);
     assert.equal(await page.locator('#sidebar').evaluate(n=>n.inert),true);assert.ok(await page.locator('main').evaluate(n=>n.getBoundingClientRect().width>=innerWidth-1));
@@ -138,6 +153,8 @@ try{
   }
   await page.locator('#demo-dialog').waitFor({state:'hidden'});assert.equal(await nav.getAttribute('aria-expanded'),'false');
   await page.setViewportSize({width:1440,height:1050});await page.waitForFunction(()=>!mobileNavigation.matches && !document.getElementById('sidebar').inert);assert.equal(await nav.isVisible(),false);assert.equal(await page.locator('#workspace').evaluate(n=>n.classList.contains('sidebar-collapsed')),true);
+  assert.equal(await page.locator('main>.heading').count(),1,'desktop restores the existing heading to main');
+  assert.notEqual(await page.locator('main>.heading').evaluate(n=>getComputedStyle(n).position),'fixed');
   await page.locator('#sidebar-toggle').click();assert.equal(await page.locator('#workspace').evaluate(n=>n.classList.contains('sidebar-collapsed')),false);
   assert.deepEqual(errors,[]);console.log(`Mobile layout passed (${engine.name()}): frosted-glass moving toggle, swipe/cancel/vertical scroll, synchronized spring motion, axis selection/create/save, drawer and focus, account menu, calendar filtering/navigation, tour, 320–1440px, effects on/off.`);
 }finally{

@@ -386,7 +386,7 @@ function navigationIcon(category) {
 }
 function animateView() {
   if(matchMedia("(prefers-reduced-motion: reduce)").matches)return;
-  [document.querySelector(".heading"),document.querySelector(".summary"),$("board")].filter(node=>!node.hidden).forEach((node,index)=>{
+  [document.querySelector(".heading"),document.querySelector(".summary"),$("board")].filter(node=>!node.hidden && !(node.classList.contains("heading") && matchMedia("(max-width:900px)").matches)).forEach((node,index)=>{
     node.getAnimations().forEach(animation=>animation.cancel());
     node.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"translateY(0)"}],{duration:260,delay:index*35,easing:"cubic-bezier(.2,.7,.25,1)",fill:"backwards"});
   });
