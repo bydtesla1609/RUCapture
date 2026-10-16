@@ -37,7 +37,7 @@ try {
   await Promise.all([page.waitForEvent("load"),page.locator("#collector-recheck").click()]);
   await page.locator("#sources-dialog").waitFor({state:"visible"});
   assert.equal(await page.locator("#website-list .website-row").count(),0);assert.equal(await page.locator("#sources-list .source-row").count(),0);
-  async function addWebsite(url) {await page.evaluate(()=>setSyncStep(3));await page.locator("#add-source-link").click();await page.locator("#source-url").fill(url);await page.locator("#save-source-link").click();await page.locator("#source-links-form").waitFor({state:"hidden"});await page.waitForFunction(()=>!websiteBusy);}
+  async function addWebsite(url) {await page.evaluate(()=>setSyncStep(3));await page.locator("#add-source-link").click();await page.locator("#source-name").fill(new URL(url).hostname);await page.locator("#source-url").fill(url);await page.locator("#save-source-link").click();await page.locator("#source-links-form").waitFor({state:"hidden"});await page.waitForFunction(()=>!websiteBusy);}
   await addWebsite("https://smartestu.cn/assignment");await addWebsite("https://course.example/homework");
   await page.evaluate(()=>setSyncStep(3));assert.equal(await page.locator("#website-list .website-row").count(),2);assert.equal(await page.getByRole("button",{name:"识别设置：course.example",exact:true}).count(),1);
   await page.evaluate(()=>{

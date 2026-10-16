@@ -51,6 +51,14 @@ if(!process.env.TRIAL_UI_FIXTURE) test("trial accounts enforce invitations, isol
     assert.equal((await b.api("/api/register","POST",{username:"bob",password,invite:invites[1]})).status,200);
     assert.equal((await a.api("/api/source-links")).data.links.length,0);
     assert.equal((await a.api("/api/source-links","PUT",{urls:["https://smartestu.cn/assignment","https://course.example/homework"]})).status,200);
+    for(const name of [undefined,"","   ","x".repeat(257)])assert.equal((await a.api("/api/source-links","PUT",{links:[{url:"https://smartestu.cn/assignment",name}]})).status,400);
+    assert.equal((await a.api("/api/source-links")).data.links.length,2,"invalid names leave the saved websites intact");
+    const namedLinks=[{url:"https://smartestu.cn/assignment",name:"  数学分析作业  "},{url:"https://course.example/homework",name:"课程学习资料"}];
+    assert.equal((await a.api("/api/source-links","PUT",{links:namedLinks})).status,200);
+    assert.deepEqual((await a.api("/api/source-links")).data.links.map(link=>link.name),["数学分析作业","课程学习资料"]);
+    assert.equal((await a.api("/api/board")).data.sources.find(source=>source.id==="smartestu").name,"数学分析作业");
+    assert.equal((await a.api("/api/source-links","PUT",{urls:namedLinks.map(link=>link.url)})).status,200);
+    assert.deepEqual((await a.api("/api/source-links")).data.links.map(link=>link.name),["数学分析作业","课程学习资料"],"legacy clients preserve custom names");
     assert.equal((await b.api("/api/source-links")).data.links.length,0);
     const file=new FormData();file.set("file",new Blob(["%PDF-test"],{type:"application/pdf"}),"test.pdf");
     const upload=await a.api("/api/files","POST",file);assert.equal(upload.status,201);const fileId=upload.data.id;

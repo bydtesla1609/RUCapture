@@ -112,7 +112,7 @@ function showLogin() {
   sourceLinksState=null;if(trialMode)boardAccount="";
   syncStep=syncVisited=1;syncExecuted=false;cloudPanelLoading=false;$("cloud-panel").replaceChildren();
   editing=null;deleting=null;draftTodos=[];draftAttachments=[];attachmentStorage=null;calendarTypes=new Set(CALENDAR_TYPES);
-  $("task-form").reset();$("task-todos").replaceChildren();$("task-links").replaceChildren();$("task-attachments").replaceChildren();$("source-url").value="";$("website-list").replaceChildren();$("source-links-form").hidden=true;$("recovery-value").textContent="";$("account-password").value="";
+  $("task-form").reset();$("task-todos").replaceChildren();$("task-links").replaceChildren();$("task-attachments").replaceChildren();$("source-links-form").reset();$("website-list").replaceChildren();$("source-links-form").hidden=true;$("recovery-value").textContent="";$("account-password").value="";
 }
 function formatTime(value, includeYear = false) {
   if (!value) return "待补充时间";
@@ -911,27 +911,28 @@ function renderWebsiteLinks() {
     const edit=element("button","编辑","text-button"),remove=element("button","移除","text-button");
     edit.type=remove.type="button";edit.disabled=remove.disabled=websiteBusy;
     edit.setAttribute("aria-label",`编辑网站：${websiteName(link)}`);remove.setAttribute("aria-label",`移除网站：${websiteName(link)}`);
-    edit.onclick=()=>openWebsiteInput(index);remove.onclick=async()=>{if(await confirmAction("移除网站？",`将停止同步“${websiteName(link)}”，已导入的卡片会保留。`,"移除"))saveWebsiteLinks(sourceLinksState.filter(item=>item.url!==link.url).map(link=>link.url));};
+    edit.onclick=()=>openWebsiteInput(index);remove.onclick=async()=>{if(await confirmAction("移除网站？",`将停止同步“${websiteName(link)}”，已导入的卡片会保留。`,"移除"))saveWebsiteLinks(sourceLinksState.filter(item=>item.url!==link.url).map(({name,url})=>({name,url})));};
     row.append(text);
     if(link.generic){const setup=element("button","识别设置","secondary");setup.type="button";setup.setAttribute("aria-label",`识别设置：${link.name}`);setup.onclick=()=>setupGeneric(link).catch(error=>{$("source-error").textContent=error.message;});row.append(setup);}
     row.append(edit,remove);return row;
   }));
 }
-function openWebsiteInput(index=-1) {editingWebsite=index;$("source-url").value=index<0?"":sourceLinksState[index].url;$("source-links-form").hidden=false;$("add-source-link").hidden=true;$("source-url").focus();}
-function closeWebsiteInput() {editingWebsite=-1;$("source-url").value="";$("source-links-form").hidden=true;$("add-source-link").hidden=false;}
+function openWebsiteInput(index=-1) {editingWebsite=index;$("source-name").value=index<0?"":websiteName(sourceLinksState[index]);$("source-name").setCustomValidity("");$("source-url").value=index<0?"":sourceLinksState[index].url;$("source-links-form").hidden=false;$("add-source-link").hidden=true;$("source-name").focus();}
+function closeWebsiteInput() {editingWebsite=-1;$("source-links-form").reset();$("source-name").setCustomValidity("");$("source-links-form").hidden=true;$("add-source-link").hidden=false;}
 async function loadSourceLinks() {
   const session=syncSession;
   try {const data=await api("/api/source-links");if(session!==syncSession)return;sourceLinksState=data.links;renderWebsiteLinks();renderSources();updateSyncSteps();}
   catch(error){if(session===syncSession)$("source-links-result").textContent=error.message;}
 }
-async function saveWebsiteLinks(urls,submitted=null) {
+async function saveWebsiteLinks(links,submitted=null) {
   if(websiteBusy)return;websiteBusy=true;$("save-source-link").disabled=true;renderWebsiteLinks();
   try {
-    const data=await api("/api/source-links","PUT",{urls});sourceLinksState=data.links;closeWebsiteInput();renderSources();
+    const data=await api("/api/source-links","PUT",{links});sourceLinksState=data.links;closeWebsiteInput();renderSources();
     if(collectorState?.connected && collectorState.sourceStatusControls)await collectorCommand("refresh-sources");
+    await refresh();
     const added=submitted?data.links.find(link=>link.url===new URL(submitted).href):null;
     $("source-links-result").textContent=added?.generic?"链接已保存。请打开“识别设置”，核对要导入的内容。":"网站配置已保存。";
-    if(added?.generic){await refresh();if(collectorState?.connected){try{await setupGeneric(added);}catch(error){$("source-links-result").textContent=error.message;}}return;}
+    if(added?.generic){if(collectorState?.connected){try{await setupGeneric(added);}catch(error){$("source-links-result").textContent=error.message;}}return;}
     if(added?.source && collectorState?.connected && collectorState.enabled) {
       try {requireSelectiveSync(added.source);await collectorCommand(added.source==="ruc_courses"?"academic-scan":"scan",{source:added.source});$("source-links-result").textContent="已配置，正在读取网站内容。";}
       catch(error){$("source-links-result").textContent=`已保存，可点击一键同步重试：${error.message}`;}
@@ -940,10 +941,12 @@ async function saveWebsiteLinks(urls,submitted=null) {
   finally{websiteBusy=false;$("save-source-link").disabled=false;renderWebsiteLinks();updateSyncSteps();}
 }
 $("add-source-link").onclick=()=>openWebsiteInput();$("cancel-source-link").onclick=closeWebsiteInput;
+$("source-name").oninput=()=>$("source-name").setCustomValidity("");
 $("source-links-form").onsubmit=event=>{
-  event.preventDefault();const url=$("source-url").value.trim(),urls=(sourceLinksState || []).map(link=>link.url);
-  if(editingWebsite>=0)urls[editingWebsite]=url;else urls.push(url);
-  saveWebsiteLinks(urls,url);
+  event.preventDefault();const name=$("source-name").value.trim(),url=$("source-url").value.trim(),links=(sourceLinksState || []).map(({name,url})=>({name,url}));
+  if(!name){$("source-name").setCustomValidity("请填写网站名称");$("source-name").reportValidity();return;}
+  if(editingWebsite>=0)links[editingWebsite]={name,url};else links.push({name,url});
+  saveWebsiteLinks(links,url);
 };
 $("collector-recheck").onclick=async()=>{
   await checkCollector();

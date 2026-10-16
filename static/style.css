@@ -439,9 +439,11 @@ html{transition:opacity .22s ease}html.effects-fading{opacity:.45}
 @media(max-width:800px){.launch .landing-header{display:grid;grid-template-columns:minmax(0,1fr) auto auto}.launch .launch-nav{grid-column:1 / -1}.launch .landing-brand{min-width:0;margin:0}.launch-contact,.launch-signin{justify-self:end}}
 @media(max-width:420px){.launch .landing-header{padding:12px 16px 8px;column-gap:6px}.launch .landing-brand{gap:6px}.launch .landing-brand .wordmark{font-size:15px;letter-spacing:-.5px}.launch .landing-brand img{width:24px;height:24px}.launch-contact{padding:8px 7px}.launch-signin{padding:8px 9px}.launch-signin span{margin-left:0}}
 
-/* Metadata shares one text baseline, with whole groups wrapping on narrow cards. */
-.task-meta{align-items:baseline;font-size:13px;line-height:1.6;row-gap:6px}
-.task-meta .task-kind,.task-meta .source-label{align-items:baseline;min-width:0;max-width:100%}
+/* Type and quadrant form one left column; source links stay in the right column. */
+.task-meta{align-items:flex-start;flex-wrap:nowrap;font-size:13px;line-height:1.6;gap:12px}
+.task-meta .task-kind{flex:none;flex-direction:column;align-items:flex-start;gap:5px}
+.task-meta .task-quadrant:before{content:none}
+.task-meta .source-label{align-items:baseline;min-width:0;max-width:100%;text-align:right;gap:3px 8px}
 .task-meta .badge,.task-meta .task-quadrant,.task-meta .source-label,.task-meta .task-original-link{font-size:inherit;line-height:inherit}
 .task-source-name{min-width:0;overflow-wrap:anywhere}
 
@@ -461,6 +463,21 @@ html{transition:opacity .22s ease}html.effects-fading{opacity:.45}
   .launch-navigation .launch-contact{padding:8px 3px;border-color:transparent;font-size:11px;min-height:36px}
 }
 @media(max-width:420px){.launch .landing-header{padding:12px 16px 8px;column-gap:6px}.launch-repository{padding:8px 9px}.launch-navigation{gap:4px}}
+
+/* A shared sky continues behind the transparent navigation and all four chapters. */
+.login.launch{position:relative}
+.login.launch:before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse at 25% 0,#a28dff1e,transparent 46%),radial-gradient(ellipse at 82% 6%,#73cce71c,transparent 48%),radial-gradient(ellipse at 78% -65%,transparent 51.8%,#c6bfff16 51.9%,transparent 52.05%,transparent 61.8%,#a1d8ff0b 61.9%,transparent 62.05%)}
+.launch .landing-header{background:transparent;backdrop-filter:none;border-bottom:0;box-shadow:none}
+.launch-page:before,.launch-atmosphere{mask-image:linear-gradient(transparent,#000 160px)}
+.landing-brand,.brand{cursor:default}
+.launch-nav button,.launch-contact,.launch-repository,.launch-signin{background:transparent;border-color:transparent;box-shadow:none;color:#c5cce2;transition:background .2s,color .2s,border-color .2s}
+.launch-nav button[aria-current=step]{background:transparent;box-shadow:none;color:#eeeaff;text-decoration:underline;text-decoration-color:#bca4ff80;text-underline-offset:8px}
+.launch-signin{border-color:#c4b7ff55;color:#e8e1ff}
+.launch-signin span{color:inherit}
+.landing-header :is(button,a):focus-visible{background:#b6a4ff1f;outline:2px solid #c2b7f6;outline-offset:3px}
+.landing-header :is(button,a):active{background:#b6a4ff26}
+@media(hover:hover){.landing-header :is(button,a):hover{background:#b6a4ff1f;color:#fff;box-shadow:none;text-decoration:none;transform:none}}
+@media(max-width:680px){#source-name{font-size:16px}}
 
 /* Daily summaries use the existing dialog surface, with no decorative artwork. */
 #daily-summary-dialog{width:640px}

@@ -28,6 +28,15 @@ try{
   assert.equal(await page.locator('.launch-question,.launch-note,.demo-caption').count(),0);
   assert.ok(!(await page.locator('#login').innerText()).includes('本阶段名额'));
   assert.equal(await page.locator('#login-form').getByText(/许可证|AGPLv3/).count(),0);
+  const isStaticBrand=node=>node.tagName==='DIV' && node.tabIndex===-1 && !node.closest('a,button');
+  assert.ok(await page.locator('.landing-brand').evaluate(isStaticBrand));
+  await page.locator('#password').fill('preserved brand draft');await page.locator('.landing-brand').click();assert.equal(await page.locator('#password').inputValue(),'preserved brand draft');
+  assert.equal(await page.locator('.landing-header').evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+  const navButton=page.locator('.launch-nav button').nth(1);
+  await page.mouse.move(0,150);
+  assert.equal(await navButton.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
+  await navButton.hover();await page.waitForFunction(()=>getComputedStyle(document.querySelectorAll('.launch-nav button')[1]).backgroundColor!=='rgba(0, 0, 0, 0)');
+  await page.mouse.move(0,150);
   for(const width of [1440,1024,960,768,390,320]){
     await page.setViewportSize({width,height:1000});
     for(let i=0;i<4;i++){
@@ -133,6 +142,20 @@ try{
     await refresh();calendarSelect('2098-03-15');
   });
   assert.equal(await page.locator('#workspace').getByText(/源码与许可证|AGPLv3/).count(),0);
+  assert.ok(await page.locator('.brand-row .brand').evaluate(isStaticBrand));
+  await page.locator('.brand-row .brand').click();assert.equal(await page.locator('#workspace').isVisible(),true);
+  // Required names persist in the website form; whitespace cannot submit.
+  await page.evaluate(async()=>{await api('/api/source-links','PUT',{links:[]});});await page.locator('#sources-button').click();await page.evaluate(async()=>{await loadSourceLinks();setSyncStep(3);});
+  await page.locator('#add-source-link').click();await page.locator('#source-url').fill('https://smartestu.cn/assignment');
+  await page.locator('#save-source-link').click();assert.equal(await page.locator('#source-name').evaluate(node=>node.validity.valueMissing),true);
+  await page.locator('#source-name').fill('   ');await page.locator('#save-source-link').click();assert.equal(await page.locator('#source-name').evaluate(node=>node.validationMessage),'请填写网站名称');
+  await page.locator('#source-name').fill('数学分析作业');await page.locator('#save-source-link').click();await page.waitForFunction(()=>!websiteBusy && document.getElementById('source-links-form').hidden);
+  await page.locator('#website-list').getByRole('button',{name:'编辑网站：数学分析作业',exact:true}).click();assert.equal(await page.locator('#source-name').inputValue(),'数学分析作业');
+  await page.locator('#source-name').fill('数学分析课程');await page.locator('#save-source-link').click();await page.waitForFunction(()=>!websiteBusy && document.getElementById('source-links-form').hidden);
+  await page.evaluate(()=>loadSourceLinks());assert.equal(await page.locator('#website-list').getByRole('button',{name:'编辑网站：数学分析课程',exact:true}).count(),1);
+  await page.setViewportSize({width:320,height:900});await page.locator('#add-source-link').click();
+  assert.equal(await page.locator('#source-name').inputValue(),'');assert.ok(await page.locator('#sources-dialog').evaluate(node=>node.scrollWidth<=node.clientWidth));
+  await page.screenshot({path:'data/screenshots/website-name-320.png'});await page.locator('#cancel-source-link').click();await page.locator('#sources-dialog .close-dialog').first().click();
   // Reproduce the imported-card metadata row without changing any fixture records.
   for(const width of [1440,1024,768,390,320]){
     await page.setViewportSize({width,height:1000});
@@ -143,16 +166,16 @@ try{
     });
     const fixture=page.locator('#metadata-fixture');
     assert.ok(await fixture.evaluate(node=>{
-      const parts=[...node.querySelectorAll('.task-meta .badge,.task-meta .task-quadrant,.task-source-name,.task-original-link')].map(part=>{const range=document.createRange();range.selectNodeContents(part);return range.getBoundingClientRect();});
-      return parts.every((a,i)=>parts.slice(i+1).every(b=>Math.abs(a.top-b.top)<1 || a.bottom<=b.top || b.bottom<=a.top)) && node.querySelector('.task-meta').scrollWidth<=node.querySelector('.task-meta').clientWidth;
-    }),`metadata text shares a baseline without overflow at ${width}px`);
+      const type=node.querySelector('.badge').getBoundingClientRect(),quadrant=node.querySelector('.task-quadrant').getBoundingClientRect(),source=node.querySelector('.source-label').getBoundingClientRect();
+      return Math.abs(type.left-quadrant.left)<1 && quadrant.top>=type.bottom && source.left>=quadrant.right && Math.abs(source.top-type.top)<1 && node.querySelector('.task-meta').scrollWidth<=node.querySelector('.task-meta').clientWidth;
+    }),`quadrant sits under the type and source stays right without overflow at ${width}px`);
     if(width===1440 || width===320)await fixture.screenshot({path:`data/screenshots/metadata-alignment-${width}.png`});
     await fixture.evaluate(node=>node.querySelector('.task-source-name').textContent='很长的网站名称ABCDEFGHIJKLMNOPQRSTUVWXYZ');
     assert.ok(await fixture.evaluate(node=>node.scrollWidth<=node.clientWidth),'long source names wrap within the card');
   }
   await page.locator('#metadata-fixture').evaluate(node=>node.remove());await page.setViewportSize({width:1440,height:1000});
   assert.equal(await page.locator('.calendar-event .task-quadrant').count(),8);
-  const first=page.locator('.calendar-event').filter({hasText:'一考试'});assert.deepEqual(await first.locator('.task-kind>span').allTextContents(),['考试','紧急且重要']);const kind=await first.locator('.badge').boundingBox(),priority=await first.locator('.task-quadrant').boundingBox();assert.ok(priority.x>kind.x+kind.width && Math.abs(priority.y+priority.height/2-kind.y-kind.height/2)<2);
+  const first=page.locator('.calendar-event').filter({hasText:'一考试'});assert.deepEqual(await first.locator('.task-kind>span').allTextContents(),['考试','紧急且重要']);const kind=await first.locator('.badge').boundingBox(),priority=await first.locator('.task-quadrant').boundingBox();assert.ok(Math.abs(priority.x-kind.x)<1 && priority.y>=kind.y+kind.height);
   await page.screenshot({path:'data/screenshots/priority-calendar.png',fullPage:true});
   for(const type of ['作业','考试','会议','活动','记录']){
     await page.locator('#categories button').filter({has:page.locator('span',{hasText:new RegExp(`^${type}$`)})}).click();assert.ok(await page.locator('#board .task-quadrant').count()>0);

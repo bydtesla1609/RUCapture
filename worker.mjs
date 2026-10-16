@@ -19,25 +19,32 @@ function configuredSources(env) {
     return [id,{...source,url:url.protocol==="https:" && url.hostname===new URL(source.url).hostname && !url.username && !url.password ? url.href : source.url}];
   }));
 }
-export function sourceLinks(values) {
+export function sourceLinks(values,{requireNames=false}={}) {
   if(!Array.isArray(values) || values.length>12)fail(400,"最多保存 12 个网站链接");
   const unique=new Set();
   return values.map(value=>{
-    const url=new URL(webURL(value,"作业页面链接"));
+    const named=value && typeof value==="object",name=named && typeof value.name==="string"?value.name.trim():"";
+    if(requireNames && !name)fail(400,"请填写网站名称");
+    if(requireNames && name.length>256)fail(400,"网站名称最多 256 个字");
+    const url=new URL(webURL(named?value.url:value,"作业页面链接"));
     if(url.protocol!=="https:" && !(url.protocol==="http:" && url.hostname==="yoj.ruc.edu.cn" && !url.port))fail(400,"请填写 HTTPS 链接；YOJ 支持其原有 HTTP 地址");
     const host=url.hostname;
     const source=({"yoj.ruc.edu.cn":"yoj","k.ruc.edu.cn":"weilai","ruc.thusaac.com":"tuoj"})[host] || (host==="smartestu.cn"?"smartestu":host==="www.ketangpai.com"?"ketangpai":host==="www.zhifz.com"?"zhifz":/(^|\.)chaoxing\.com$/.test(host)?"chaoxing":host==="jw.ruc.edu.cn"?"ruc_courses":null);
-    return {url:url.href,source:source || `web:${url.origin}`,name:source?SOURCES[source].name:host,...(!source?{generic:true}:{})};
+    return {url:url.href,source:source || `web:${url.origin}`,name:name || (source?SOURCES[source].name:host),...(!source?{generic:true}:{})};
   }).filter(link=>{if(unique.has(link.url))return false;unique.add(link.url);return true;});
 }
 async function savedLinks(env) {
   const saved=await env.DB.prepare("SELECT value FROM settings WHERE key='source_links'").first();
-  if(saved)return sourceLinks(JSON.parse(saved.value).map(link=>link.url));
+  if(saved)return sourceLinks(JSON.parse(saved.value));
   return env.TRIAL_MODE?[]:sourceLinks(Object.entries(configuredSources(env)).filter(([id,source])=>!["zhifz","yoj","weilai","tuoj"].includes(id) && (!source.kind || source.name==="人大课表")).map(([,source])=>source.url));
 }
 async function allSources(env) {
   const sources=configuredSources(env);
-  for(const link of await savedLinks(env))if(link.generic && !sources[link.source])sources[link.source]={name:link.name,url:link.url,browser_only:true,generic:true};
+  const named=new Set();
+  for(const link of await savedLinks(env))if(!named.has(link.source)){
+    sources[link.source]=sources[link.source]?{...sources[link.source],name:link.name}:{name:link.name,url:link.url,browser_only:true,generic:true};
+    named.add(link.source);
+  }
   return sources;
 }
 const CATEGORIES = ["作业", "课程", "考试", "活动", "会议", "记录"];
@@ -48,6 +55,7 @@ const FILE_LIMIT=10*1024*1024, STORAGE_LIMIT=100*1024*1024, CHUNK_SIZE=512*1024;
 const now = () => new Date().toISOString();
 // Keep published versions here, newest first; read receipts track only the latest.
 export const RELEASES=[
+  {version:"3.1.7",title:"卡片排版与透明导航",items:["象限信息放到卡片类型下方，优化窄屏布局","登录页使用透明导航，悬停时填充；两处品牌标题不再跳转","添加网站必须填写名称，支持修改和跨设备保存，无需更新扩展"]},
   {version:"3.1.6",title:"同步提示与界面优化",items:["扩展 v1.9.7：关闭自动同步或删除网站后隐藏同步提示，可手动关闭并在从看板打开网站时恢复","统一卡片顶部文字对齐，优化手机换行","登录页右上角新增查看仓库入口"]},
   {version:"3.1.5",title:"演示与布局优化",items:["使用演示切换更顺畅，归档列表适配不同屏幕","统一登录页标志与作业空看板提示","更新看板支持展开查看 RUCapture 历史版本"]},
   {version:"3.1.4",title:"视图演示与快捷建轴",items:["日历、轴线分别演示，自动切换到对应视图","活动、会议、记录空看板增加添加入口；检测提示在弹窗内显示","所属轴线可直接新建，返回编辑时保留卡片草稿"]},
@@ -372,7 +380,11 @@ async function route(request, env) {
   }
   if(path==="/api/source-links" && method==="GET")return json({links:await savedLinks(env)});
   if(path==="/api/source-links" && method==="PUT") {
-    const links=sourceLinks((await body(request)).urls);
+    const input=await body(request),hasNames=Object.hasOwn(input,"links");
+    // Existing clients send URL arrays; preserve saved names when they edit the list.
+    const previous=hasNames?[]:await savedLinks(env);
+    const values=hasNames?input.links:Array.isArray(input.urls)?input.urls.map(url=>previous.find(link=>link.url===url) || url):input.urls;
+    const links=sourceLinks(values,{requireNames:hasNames});
     await db.prepare("INSERT INTO settings(key,value) VALUES ('source_links',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").bind(JSON.stringify(links)).run();
     if(env.TRIAL_MODE)for(const source of ["smartestu","ketangpai","chaoxing","zhifz","weilai","tuoj"])if(!links.some(link=>link.source===source))await db.prepare("DELETE FROM settings WHERE key IN (?,?)").bind(`cloud_credential_${source}`,`cloud_state_${source}`).run();
     return json({links});
