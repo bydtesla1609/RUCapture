@@ -55,6 +55,7 @@ const FILE_LIMIT=10*1024*1024, STORAGE_LIMIT=100*1024*1024, CHUNK_SIZE=512*1024;
 const now = () => new Date().toISOString();
 // Keep published versions here, newest first; read receipts track only the latest.
 export const RELEASES=[
+  {version:"3.1.8",title:"手机照片附件与固定顶栏",items:["大照片在本机自动压缩后上传，保留原图与已有附件配额","手机端总览至记录使用单行固定顶栏，透明模糊背景下仍可展开导航和添加卡片","补充大照片、多文件与断网重试验证，扩展维持 v1.9.7，无需更新"]},
   {version:"3.1.7",title:"卡片排版与透明导航",items:["象限信息放到卡片类型下方，优化窄屏布局","登录页使用透明导航，悬停时填充；两处品牌标题不再跳转","添加网站必须填写名称，支持修改和跨设备保存，无需更新扩展"]},
   {version:"3.1.6",title:"同步提示与界面优化",items:["扩展 v1.9.7：关闭自动同步或删除网站后隐藏同步提示，可手动关闭并在从看板打开网站时恢复","统一卡片顶部文字对齐，优化手机换行","登录页右上角新增查看仓库入口"]},
   {version:"3.1.5",title:"演示与布局优化",items:["使用演示切换更顺畅，归档列表适配不同屏幕","统一登录页标志与作业空看板提示","更新看板支持展开查看 RUCapture 历史版本"]},
@@ -575,7 +576,7 @@ export default {
     catch(error) { response=json({error:error.status ? error.message : "服务器暂时无法处理请求，请稍后重试"},error.status || 500); if(!error.status) console.error("Board request failed:",error.message); }
     const headers=new Headers(response.headers);
     headers.set("Cache-Control","no-store"); headers.set("X-Content-Type-Options","nosniff"); headers.set("Referrer-Policy","no-referrer");
-    if(!headers.has("Content-Security-Policy")) headers.set("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' chrome-extension:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    if(!headers.has("Content-Security-Policy")) headers.set("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self' chrome-extension:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     return new Response(response.body,{status:response.status,headers});
   }
 };

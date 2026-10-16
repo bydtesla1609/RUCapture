@@ -133,3 +133,14 @@
 :root:not([data-effects="off"]) .workspace .axis-node:hover circle{filter:drop-shadow(0 0 8px #bad9ff70);stroke-width:2.5}
 
 @media(max-width:680px){:root:not([data-effects="off"]) .workspace[data-category="记录"] .summary .record-stat{width:116px;right:-20px;top:27px;opacity:.38}}
+
+/* The mobile app bar stays aligned and readable over the scrolling content, in both themes. */
+@media(max-width:900px){
+  #workspace>main>.heading{position:sticky;top:0;z-index:30;display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;min-height:calc(64px + env(safe-area-inset-top));height:calc(64px + env(safe-area-inset-top));margin:calc(-14px - env(safe-area-inset-top)) calc(-1 * max(16px,env(safe-area-inset-right))) 20px calc(-1 * max(16px,env(safe-area-inset-left)));padding:calc(10px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 10px calc(max(16px,env(safe-area-inset-left)) + 56px);border:0;border-radius:0;background:#14182b38;box-shadow:inset 0 -1px #dce8ff12,0 6px 22px #050b1b12;-webkit-backdrop-filter:blur(22px) saturate(165%);backdrop-filter:blur(22px) saturate(165%);isolation:isolate}
+  #workspace>main>.heading>.workspace-scene,#workspace>main>.heading:after,#workspace>main>.heading h1:after{display:none}
+  #workspace>main>.heading h1{font-size:21px;line-height:44px;letter-spacing:0;white-space:nowrap}
+  #workspace>main>.heading .add-control{flex:none;margin-left:auto;align-self:center}
+  #workspace>main>.heading .primary{font-size:14px;padding:10px 12px;min-height:44px;white-space:nowrap}
+  #workspace>main :is(button,input,select,summary,.task,.planning-card){scroll-margin-top:calc(80px + env(safe-area-inset-top))}
+  html:has(#workspace:not([hidden])){scroll-padding-top:calc(80px + env(safe-area-inset-top))}
+}

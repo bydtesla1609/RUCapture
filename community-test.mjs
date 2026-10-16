@@ -38,7 +38,7 @@ test('admin invitation, private feedback, unread receipts, announcements and arc
     const feed=(await alice.api('/api/announcements')).data;assert.equal(feed.announcements.length,1);assert.equal(feed.last_read,0);
     await alice.api('/api/announcements/read','POST',{last_id:feed.announcements[0].id});assert.equal((await bob.api('/api/announcements')).data.last_read,0);
     const release=(await alice.api('/api/notices')).data;assert.equal(release.unread,true);
-    assert.deepEqual(release.releases.map(item=>item.version),['3.1.7','3.1.6','3.1.5','3.1.4','3.1.3','3.1.2','3.1.1','3.1.0','3.0.0']);
+    assert.deepEqual(release.releases.map(item=>item.version),['3.1.8','3.1.7','3.1.6','3.1.5','3.1.4','3.1.3','3.1.2','3.1.1','3.1.0','3.0.0']);
     assert.deepEqual(release.release,release.releases[0]);assert.ok(release.releases.every(item=>item.title && item.items.length));
     assert.equal((await alice.api('/api/notices/read','POST',{version:'3.0.0'})).status,400,'reading history must not mark the latest update read');
     await alice.api('/api/notices/read','POST',{version:release.release.version});assert.equal((await alice.api('/api/notices')).data.unread,false);assert.equal((await bob.api('/api/notices')).data.unread,true);

@@ -15,6 +15,13 @@ Copyright (C) 2026 bydtesla1609。RUCapture 的原创代码采用 **GNU Affero G
 
 扩展打包命令会把 `LICENSE` 和 `COPYRIGHT` 一并放入安装包，Pages 构建也会携带这两个文件。官方说明：[GNU 为什么使用 Affero GPL](https://www.gnu.org/licenses/why-affero-gpl.html)、[GitHub 的 AGPLv3 许可摘要](https://choosealicense.com/licenses/agpl-3.0/)。
 
+## 网页 3.1.8（2026-10-16）
+
+- 修复手机相册大照片被 1 MB 限制直接拒绝：上传前在本机缩放、压缩为 JPEG，原图不变；小文件保持原样，浏览器可解码的 HEIC 转为 JPEG。无法读取、空文件和非图片超限分别提示，失败后保留草稿与已上传部分。账号配额与附件访问保护保持不变。
+- 手机端总览、作业、考试、活动、会议、记录统一为“展开导航、类型名、添加”单行固定顶栏；透明背景与模糊效果支持两种视觉设置，并适配安全区和窄屏。电脑布局保持不变。
+- 回归入口：`npm run test:photo-ui`、`npm run test:attachment-ui`、`npm run test:mobile-save-ui`、`npm run test:mobile-layout`。照片与顶栏用例支持 `MOBILE_BROWSER=webkit` 或 `chromium`；使用合成照片、隔离账号和本机数据库，不读取正式用户数据。WebKit 浏览器测试不等同于真实 iPhone 微信相册选择器验收。
+- 网页 v3.1.8，扩展维持 v1.9.7，无需更新扩展。
+
 ## 网页 3.1.7（2026-10-16）
 
 - 卡片类型与象限上下排列，来源和原页面链接位于右侧，适配窄屏。

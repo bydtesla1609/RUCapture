@@ -1,6 +1,6 @@
 {
   "name": "rucapture",
-  "version": "3.1.7",
+  "version": "3.1.8",
   "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
@@ -34,6 +34,8 @@
     "test:calendar-ui": "node calendar-ui-test.mjs",
     "test:mobile-save-ui": "node mobile-save-ui-test.mjs",
     "test:attachment-ui": "node attachment-ui-test.mjs",
+    "test:photo-ui": "node photo-upload-ui-test.mjs",
+    "test:mobile-layout": "node mobile-layout-ui-test.mjs",
     "test:launch-ui": "node launch-ui-test.mjs",
     "test:free-sync-ui": "node free-sync-ui-test.mjs",
     "preview": "node preview.mjs",

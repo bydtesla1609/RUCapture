@@ -163,16 +163,49 @@ function addLinkRow(link = {label:"",url:""}) {
   remove.type="button"; remove.setAttribute("aria-label", "移除链接"); remove.onclick=async()=>{if(await confirmAction("移除这条链接？","保存卡片后生效。","移除"))row.remove();}; row.append(label,url,remove); $("task-links").append(row);
 }
 $("add-link").onclick=()=>addLinkRow();
+const isPhoto=file=>/^image\/(jpeg|png|webp|heic|heif|bmp|avif)$/.test(file.type) || /\.(jpe?g|png|webp|heic|heif|bmp|avif)$/i.test(file.name);
+async function prepareAttachment(file,limit) {
+  if(!file.size)throw new Error(`“${file.name}”没有读取到内容，请重新从相册或文件中选择。`);
+  const heic=/heic|heif/i.test(file.type) || /\.hei[cf]$/i.test(file.name);
+  if(file.size<=limit && !heic)return file;
+  if(!isPhoto(file))throw new Error(`“${file.name}”超过限制，单个文件最多 ${limit/1024/1024} MB。照片会自动压缩。`);
+  if(file.size>40*1024*1024)throw new Error(`“${file.name}”超过 40 MB，请选择普通照片或较小的副本。`);
+  const url=URL.createObjectURL(file),picture=new Image(),canvas=document.createElement("canvas");
+  try {
+    await new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>reject(new Error("照片读取超时，请重新选择。")),30000);
+      picture.onload=()=>{clearTimeout(timer);resolve();};
+      picture.onerror=()=>{clearTimeout(timer);reject(new Error(`无法读取“${file.name}”。请从相册重新选择，或选择 JPG、PNG 格式的照片。`));};
+      picture.src=url;
+    });
+    if(!picture.naturalWidth || !picture.naturalHeight)throw new Error("照片没有有效画面，请重新选择。");
+    let scale=Math.min(1,2560/Math.max(picture.naturalWidth,picture.naturalHeight));
+    for(let attempt=0;attempt<5;attempt++,scale*=.75){
+      canvas.width=Math.max(1,Math.round(picture.naturalWidth*scale));canvas.height=Math.max(1,Math.round(picture.naturalHeight*scale));
+      const context=canvas.getContext("2d");if(!context)throw new Error("无法处理照片，请关闭其他页面后重试。");
+      context.fillStyle="#fff";context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(picture,0,0,canvas.width,canvas.height);
+      for(const quality of [.88,.76,.64]){
+        const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",quality));
+        if(blob?.size && blob.size<=limit)return new File([blob],`${file.name.replace(/\.[^.]+$/,"") || "照片"}.jpg`,{type:"image/jpeg",lastModified:file.lastModified});
+      }
+    }
+    throw new Error("照片压缩后仍然过大，请选择较小的照片。");
+  } finally {picture.onload=picture.onerror=null;picture.src="";URL.revokeObjectURL(url);canvas.width=canvas.height=0;}
+}
 $("attachment-input").onchange=async () => {
   const selected=[...$("attachment-input").files]; if (!selected.length) return;
   $("attachment-error").textContent="";$("upload-state").textContent="";
   if (selected.length + draftAttachments.length > 20) { $("attachment-error").textContent="每张卡片最多 20 个附件"; $("attachment-input").value=""; return; }
   const fileLimit=attachmentStorage?.file_limit || (trialMode?1:10)*1024*1024;
-  if (selected.some(file=>!file.size || file.size>fileLimit)) { $("attachment-error").textContent=`附件不能为空，单个文件最多 ${fileLimit/1024/1024} MB`; $("attachment-input").value=""; return; }
+  const invalid=selected.find(file=>!file.size || (file.size>fileLimit && !isPhoto(file)));
+  if(invalid){$("attachment-error").textContent=!invalid.size?`“${invalid.name}”没有读取到内容，请重新选择。`:`“${invalid.name}”超过限制，单个文件最多 ${fileLimit/1024/1024} MB。照片会自动压缩。`;$("attachment-input").value="";return;}
   uploading=true; $("save-task").disabled=true; $("attachment-input").disabled=true;
   $("task-dialog").querySelectorAll(".close-dialog").forEach(button=>button.disabled=true); renderAttachments();
   try {
-    for (const [index,file] of selected.entries()) {
+    let compressed=0;
+    for (const [index,original] of selected.entries()) {
+      $("upload-state").textContent=`正在处理 ${index+1}/${selected.length}：${original.name}`;
+      const file=await prepareAttachment(original,fileLimit);if(file!==original)compressed++;
       $("upload-state").textContent=`正在上传 ${index+1}/${selected.length}：${file.name}`;
       const form=new FormData(); form.set("file",file);
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),120000);
@@ -187,7 +220,7 @@ $("attachment-input").onchange=async () => {
         throw error;
       }finally{clearTimeout(timer);}
     }
-    $("upload-state").textContent="上传完成，保存任务后即可在所有设备打开。";
+    $("upload-state").textContent=`上传完成${compressed?`（已处理 ${compressed} 张照片）`:""}，保存任务后即可在所有设备打开。`;
   } catch (error) { $("attachment-error").textContent=error.message; $("attachment-error").scrollIntoView({block:"center"});$("upload-state").textContent="未上传成功的文件可重新选择，已上传部分会保留。"; }
   finally { uploading=false; $("save-task").disabled=false; $("attachment-input").disabled=false; $("attachment-input").value=""; $("task-dialog").querySelectorAll(".close-dialog").forEach(button=>button.disabled=false); renderAttachments(); }
 };

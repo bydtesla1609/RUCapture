@@ -86,6 +86,27 @@ try{
   const fits=async()=>assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'page must not scroll horizontally');
   const clickable=async locator=>{await locator.scrollIntoViewIfNeeded();assert.ok(await locator.evaluate(node=>{const r=node.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return hit===node||node.contains(hit);}));};
   await mkdir('data/screenshots/mobile-layout',{recursive:true});
+  // The same pinned row must work for all task sections, both visual modes and narrow phones.
+  for(const width of [320,390,768]){
+    await page.setViewportSize({width,height:844});
+    for(const category of ['总览','作业','考试','活动','会议','记录']){
+      await openNav();await page.locator('#categories button').filter({has:page.locator('span',{hasText:new RegExp(`^${category}$`)})}).tap();
+      for(const effects of ['on','off']){
+        await page.evaluate(value=>{document.documentElement.dataset.effects=value;document.querySelector('main').style.minHeight='1800px';scrollTo(0,0);},effects);
+        const header=page.locator('main>.heading'),title=page.locator('#view-title'),add=page.locator('#add-task');
+        let [a,b,c,h]=await Promise.all([nav.boundingBox(),title.boundingBox(),add.boundingBox(),header.boundingBox()]);
+        assert.ok(Math.abs(a.y+a.height/2-b.y-b.height/2)<2 && Math.abs(b.y+b.height/2-c.y-c.height/2)<2,`${category}/${width}/${effects}: toggle, title, add share one row`);
+        assert.ok(a.x+a.width<=b.x && b.x+b.width<c.x && c.x+c.width<=width,`${category}: header controls never overlap`);
+        assert.equal(Math.round(h.y),0);assert.ok(h.height<=68);
+        const glass=await header.evaluate(node=>{const s=getComputedStyle(node);return {color:s.backgroundColor,blur:s.backdropFilter||s.webkitBackdropFilter};});assert.match(glass.blur,/blur\(22px\)/);assert.ok(Number(glass.color.match(/[\d.]+/g).at(-1))<.5);
+        await page.evaluate(()=>scrollTo(0,280));await page.waitForFunction(()=>scrollY>200);
+        assert.equal(Math.round((await header.boundingBox()).y),0,`${category}: header remains pinned while content scrolls`);
+        for(const control of [nav,add])assert.ok(await control.evaluate(node=>{const r=node.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return node===hit||node.contains(hit);}),`${category}: pinned actions remain clickable`);
+      }
+    }
+    await page.evaluate(()=>{document.querySelector('main').style.minHeight='';scrollTo(0,0);delete document.documentElement.dataset.effects;});
+    await page.screenshot({path:`data/screenshots/mobile-layout/pinned-header-${width}.png`});
+  }
   for(const [width,height] of [[320,844],[390,844],[430,844],[768,844],[844,390]]){
     await page.setViewportSize({width,height});await fits();assert.equal(await nav.isVisible(),true);
     assert.equal(await page.locator('#sidebar').evaluate(n=>n.inert),true);assert.ok(await page.locator('main').evaluate(n=>n.getBoundingClientRect().width>=innerWidth-1));
