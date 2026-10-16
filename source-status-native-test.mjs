@@ -10,7 +10,8 @@ execFileSync('python',['package-extension.py'],{stdio:'inherit'});
 let extension=fileURLToPath(new URL('./extension/',import.meta.url)),baseline;
 if(process.env.SOURCE_STATUS_BASELINE){
   baseline=await mkdtemp(join(tmpdir(),'rucapture-status-baseline-'));await cp(extension,baseline,{recursive:true});extension=baseline;
-  for(const name of ['background.js','source-status.js','content.js','capture.js','board-bridge.js'])await writeFile(join(baseline,name),execFileSync('git',['show',`HEAD:extension/${name}`]));
+  const revision=process.env.SOURCE_STATUS_BASELINE==='1'?'a38fb61':process.env.SOURCE_STATUS_BASELINE;
+  for(const name of ['background.js','source-status.js','content.js','capture.js','board-bridge.js'])await writeFile(join(baseline,name),execFileSync('git',['show',`${revision}:extension/${name}`]));
 }
 const context=await chromium.launchPersistentContext('',{headless:true,channel:'chromium',executablePath:process.env.BROWSER_EXECUTABLE,ignoreDefaultArgs:['--disable-extensions'],args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
 context.setDefaultTimeout(8000);
