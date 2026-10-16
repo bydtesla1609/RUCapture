@@ -31,17 +31,23 @@ try{
   const isStaticBrand=node=>node.tagName==='DIV' && node.tabIndex===-1 && !node.closest('a,button');
   assert.ok(await page.locator('.landing-brand').evaluate(isStaticBrand));
   await page.locator('#password').fill('preserved brand draft');await page.locator('.landing-brand').click();assert.equal(await page.locator('#password').inputValue(),'preserved brand draft');
-  assert.equal(await page.locator('.landing-header').evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
-  const navButton=page.locator('.launch-nav button').nth(1);
-  await page.mouse.move(0,150);
-  assert.equal(await navButton.evaluate(node=>getComputedStyle(node).backgroundColor),'rgba(0, 0, 0, 0)');
-  await navButton.hover();await page.waitForFunction(()=>getComputedStyle(document.querySelectorAll('.launch-nav button')[1]).backgroundColor!=='rgba(0, 0, 0, 0)');
-  await page.mouse.move(0,150);
+  const headerTransparent=()=>page.waitForFunction(()=>getComputedStyle(document.querySelector('.landing-header')).backgroundColor==='rgba(0, 0, 0, 0)');
+  await page.mouse.move(0,150);await headerTransparent();
+  assert.match(await page.locator('.launch-signin').evaluate(node=>getComputedStyle(node).backgroundImage),/linear-gradient.*rgb\(197, 181, 255\).*rgb\(168, 186, 255\)/,'experience keeps its original purple gradient');
+  await page.screenshot({path:'data/screenshots/header-default-1440.png',animations:'disabled'});
+  for(const control of await page.locator('.landing-header button,.landing-header a').all()){
+    await control.hover();await page.waitForFunction(()=>getComputedStyle(document.querySelector('.landing-header')).backgroundColor!=='rgba(0, 0, 0, 0)');
+    assert.equal(await page.locator('#login').getAttribute('data-page'),'0','hover does not change chapters');
+    await page.screenshot({path:'data/screenshots/header-hover-1440.png',animations:'disabled'});
+    await page.mouse.move(0,150);await headerTransparent();
+  }
+  await page.locator('.landing-brand').hover();await headerTransparent();
   for(const width of [1440,1024,960,768,390,320]){
     await page.setViewportSize({width,height:1000});
     for(let i=0;i<4;i++){
       await page.locator('.launch-nav button').nth(i).click();
       await page.waitForFunction(i=>document.querySelectorAll('.launch-nav button')[i].getAttribute('aria-current')==='step',i);
+      await page.mouse.move(0,150);await headerTransparent();
       const section=page.locator('[data-launch-page]').nth(i);
       const entry=page.getByRole('button',{name:'立即体验',exact:true});assert.ok(await entry.isVisible());const entryBox=await entry.boundingBox();assert.ok(entryBox.y>=0 && entryBox.y+entryBox.height<120,'experience entry floats above every chapter');
       const repository=page.getByRole('link',{name:'查看仓库',exact:true});assert.equal(await repository.getAttribute('href'),'https://github.com/bydtesla1609/RUCapture');assert.equal(await repository.getAttribute('target'),'_blank');
