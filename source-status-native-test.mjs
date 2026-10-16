@@ -97,7 +97,7 @@ try{
   await worker.evaluate(()=>{configFailure=true;});await page.reload();
   await page.waitForLoadState();assert.equal(await status.isVisible(),false,'failed configuration check stays hidden');
   assert.deepEqual(errors,[]);
-  console.log('PASS: live pause/removal, empty and stale configs, close/reload/direct navigation, background scans, independent sites, board reopen, account binding, mobile fit and failed checks. Extension version remains 1.9.6.');
+  console.log('PASS: live pause/removal, empty and stale configs, close/reload/direct navigation, background scans, independent sites, board reopen, account binding, mobile fit and failed checks. Extension v1.9.7.');
 }finally{
   await context.close();
   if(baseline && resolve(baseline).startsWith(resolve(tmpdir())+String.raw`\rucapture-status-baseline-`))await rm(baseline,{recursive:true});

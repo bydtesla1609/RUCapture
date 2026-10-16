@@ -439,6 +439,29 @@ html{transition:opacity .22s ease}html.effects-fading{opacity:.45}
 @media(max-width:800px){.launch .landing-header{display:grid;grid-template-columns:minmax(0,1fr) auto auto}.launch .launch-nav{grid-column:1 / -1}.launch .landing-brand{min-width:0;margin:0}.launch-contact,.launch-signin{justify-self:end}}
 @media(max-width:420px){.launch .landing-header{padding:12px 16px 8px;column-gap:6px}.launch .landing-brand{gap:6px}.launch .landing-brand .wordmark{font-size:15px;letter-spacing:-.5px}.launch .landing-brand img{width:24px;height:24px}.launch-contact{padding:8px 7px}.launch-signin{padding:8px 9px}.launch-signin span{margin-left:0}}
 
+/* Metadata shares one text baseline, with whole groups wrapping on narrow cards. */
+.task-meta{align-items:baseline;font-size:13px;line-height:1.6;row-gap:6px}
+.task-meta .task-kind,.task-meta .source-label{align-items:baseline;min-width:0;max-width:100%}
+.task-meta .badge,.task-meta .task-quadrant,.task-meta .source-label,.task-meta .task-original-link{font-size:inherit;line-height:inherit}
+.task-source-name{min-width:0;overflow-wrap:anywhere}
+
+.launch-navigation{display:flex;align-items:center;justify-content:flex-end;gap:16px;min-width:0;margin-left:auto}
+.launch-repository{display:inline-flex;align-items:center;justify-content:center;flex:none;min-height:44px;padding:10px 15px;border:1px solid #becaff45;border-radius:24px;font-size:13px;line-height:1.6;color:#d4d9ef;white-space:nowrap}
+.launch-repository:hover{color:#fff;border-color:#b5caff99}
+.launch-repository:focus-visible{outline:2px solid #d7deff;outline-offset:4px}
+@media(max-width:1000px){
+  .launch .landing-header{display:grid;grid-template-columns:minmax(0,1fr) auto auto;height:auto;min-height:112px;padding:12px 24px 8px;gap:8px}
+  .launch .landing-brand{grid-column:1;grid-row:1;min-width:0;margin:0}
+  .launch-repository{grid-column:2;grid-row:1;font-size:12px;padding:8px 10px;min-height:40px}
+  .launch-signin{grid-column:3;grid-row:1;margin-left:0;white-space:nowrap}
+  .launch-navigation{grid-column:1 / -1;grid-row:2;width:100%;margin:0;gap:8px}
+  .launch .launch-nav{order:0;flex:1;min-width:0;width:auto;margin:0;gap:0;justify-content:space-between}
+  .launch-nav button{flex:1;justify-content:center;padding:8px 3px;min-height:36px;font-size:11px}
+  .launch-nav button span{display:none}
+  .launch-navigation .launch-contact{padding:8px 3px;border-color:transparent;font-size:11px;min-height:36px}
+}
+@media(max-width:420px){.launch .landing-header{padding:12px 16px 8px;column-gap:6px}.launch-repository{padding:8px 9px}.launch-navigation{gap:4px}}
+
 /* Daily summaries use the existing dialog surface, with no decorative artwork. */
 #daily-summary-dialog{width:640px}
 .daily-summary-total{font-size:1rem;color:var(--muted);margin:20px 0 12px}.daily-summary-total strong{font-size:2.4rem;line-height:1.2;color:var(--text);margin-right:8px;font-variant-numeric:tabular-nums}

@@ -13,8 +13,8 @@
 <section id="login" class="login launch" hidden aria-label="RUCapture 产品介绍与登录">
   <header class="landing-header">
     <a href="/" class="landing-brand"><img src="/static/icon.svg" width="36" height="36" alt=""><span class="wordmark"><b>RU</b>Capture</span></a>
-    <nav class="launch-nav" aria-label="产品介绍"><button type="button" data-launch-to="0" aria-current="step"><span>01</span> 汇总作业</button><button type="button" data-launch-to="1"><span>02</span> 校园日历</button><button type="button" data-launch-to="2"><span>03</span> 目标轴线</button><button type="button" data-launch-to="3"><span>04</span> 规划专注</button></nav>
-    <a class="launch-contact" href="https://xhslink.cn/o/5JLJ8hb11TH" target="_blank" rel="noopener noreferrer">联系我们</a>
+    <div class="launch-navigation"><nav class="launch-nav" aria-label="产品介绍"><button type="button" data-launch-to="0" aria-current="step"><span>01</span> 汇总作业</button><button type="button" data-launch-to="1"><span>02</span> 校园日历</button><button type="button" data-launch-to="2"><span>03</span> 目标轴线</button><button type="button" data-launch-to="3"><span>04</span> 规划专注</button></nav><a class="launch-contact" href="https://xhslink.cn/o/5JLJ8hb11TH" target="_blank" rel="noopener noreferrer">联系我们</a></div>
+    <a class="launch-repository" href="https://github.com/bydtesla1609/RUCapture" target="_blank" rel="noopener noreferrer">查看仓库</a>
     <button type="button" class="launch-signin" data-launch-login aria-controls="login-form">立即体验 <span aria-hidden="true">↗</span></button>
   </header>
   <div class="launch-stage"><div class="launch-track">
@@ -46,7 +46,6 @@
     <label class="remember-control"><input id="remember-login" type="checkbox">自动登录 <small>30 天内保持登录</small></label>
     <p id="login-error" class="error" role="alert"></p><button type="submit" class="primary">进入看板 <span aria-hidden="true">→</span></button>
     <button id="auth-recover" type="button" class="text-button" hidden>忘记密码？使用恢复码</button>
-    <p class="hint"><a href="https://github.com/bydtesla1609/RUCapture" target="_blank" rel="noopener noreferrer">源码与许可证 · AGPLv3</a></p>
   </form><div class="landing-stats"><div><strong id="public-user-count">—</strong><span>位同学已加入</span></div></div></div>
     </div>
     <button type="button" class="launch-next" data-launch-to="1">明天的课和考试，也能一起安排吗？ <span aria-hidden="true">↓</span></button>
@@ -77,7 +76,7 @@
   <button id="mobile-nav-toggle" class="mobile-nav-toggle" type="button" aria-label="展开导航" aria-expanded="false" aria-controls="sidebar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h11M4 17h7"/></svg></button>
   <div id="mobile-nav-backdrop" class="mobile-nav-backdrop" aria-hidden="true"></div>
   <aside id="sidebar" class="sidebar" aria-label="主导航">
-    <div class="brand-row"><a class="brand" href="/" aria-label="RUCapture首页"><span class="brand-icon" aria-hidden="true"><img src="/static/icon.svg" alt="" width="56" height="56"></span><span class="brand-copy"><span class="wordmark"><b>RU</b>Capture</span><small id="app-version">v3.1.5</small></span></a><button id="sidebar-toggle" class="sidebar-toggle" aria-label="收起侧栏" aria-expanded="true" title="收起侧栏"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4"/><path class="sidebar-divider" d="M12 4v16"/></svg></button></div>
+    <div class="brand-row"><a class="brand" href="/" aria-label="RUCapture首页"><span class="brand-icon" aria-hidden="true"><img src="/static/icon.svg" alt="" width="56" height="56"></span><span class="brand-copy"><span class="wordmark"><b>RU</b>Capture</span><small id="app-version">v3.1.6</small></span></a><button id="sidebar-toggle" class="sidebar-toggle" aria-label="收起侧栏" aria-expanded="true" title="收起侧栏"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4"/><path class="sidebar-divider" d="M12 4v16"/></svg></button></div>
     <nav id="categories" aria-label="校园板块"></nav>
     <div class="sidebar-bottom">
       <button id="focus-button" class="nav-button" aria-label="专注模式"><span>专注模式</span><span id="focus-countdown"></span></button>
@@ -110,7 +109,6 @@
   <button id="feedback-button" class="user-menu-item" hidden><span>建议与反馈</span><small id="feedback-unread" hidden></small></button>
   <button id="archive-button" class="user-menu-item" aria-label="归档处"><span>归档处</span></button>
   <button id="account-button" class="user-menu-item" hidden><span>账号与恢复码</span></button>
-  <a class="user-menu-item" href="https://github.com/bydtesla1609/RUCapture" target="_blank" rel="noopener noreferrer"><span>源码与许可证</span><small>AGPLv3</small></a>
   <div class="user-menu-divider"></div><button id="logout" class="user-menu-item logout-item"><span>退出登录</span></button>
 </nav>
 <dialog id="task-dialog">
@@ -170,7 +168,7 @@
   </ol>
   <section id="guide-install" class="guide-step" aria-labelledby="sync-tab-1" data-step="1">
     <h3>安装或更新扩展</h3><div id="collector-install" class="step-body"><p id="install-state" class="hint" role="status">仅需在电脑上安装一次</p>
-    <a class="secondary extension-download" href="/extension.zip?v=1.9.6&amp;fix=20261016" download="RUCapture-extension.zip">下载扩展 v1.9.6</a>
+    <a class="secondary extension-download" href="/extension.zip?v=1.9.7" download="RUCapture-extension-v1.9.7.zip">下载扩展 v1.9.7</a>
     <h4>首次安装</h4><ol><li>下载并解压，找到 <strong>extension</strong> 文件夹。</li><li>打开浏览器的“扩展程序 → 管理扩展”。<button id="copy-extension-page" class="text-button" type="button">复制管理页地址</button></li><li>开启“开发人员模式”，选择“加载解压缩的扩展”，选中该文件夹。</li></ol>
     <details class="extension-update"><summary>已安装：如何更新？</summary><ol><li>将新版 extension 内的文件替换到原安装文件夹。</li><li>在管理扩展页面点击“重新加载”，再刷新本网页。</li></ol><p class="hint">无需卸载；已有卡片会保留。</p><button id="collector-options" class="text-button" type="button" disabled>打开扩展设置</button></details>
     <button id="collector-recheck" class="primary" type="button">我已安装，重新检测</button><button id="sync-existing" class="text-button" type="button" hidden>查看已配置网站的同步</button></div>

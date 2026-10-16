@@ -35,7 +35,7 @@ try{
  const page=await context.newPage();await page.goto(origin);
  assert.equal(await page.locator('.cloud-core svg').count(),1);
  await page.locator('#password').fill('isolated-sync-test');await page.locator('#login-form button[type=submit]').click();await page.locator('#workspace').waitFor();
- await page.locator('#sources-button').click();await page.waitForFunction(()=>document.getElementById('install-state').textContent.includes('1.9.6'));
+ await page.locator('#sources-button').click();await page.waitForFunction(()=>document.getElementById('install-state').textContent.includes('1.9.7'));
  await page.locator('#sync-tab-5').click();assert.equal(await page.locator('#guide-install').isVisible(),true,'progress indicators cannot navigate');
  await page.locator('#collector-recheck').click();assert.equal(await page.locator('#guide-install').isVisible(),true);await page.locator('#sync-next').click();
  await page.locator('#account-setup').waitFor();assert.equal(await page.locator('#sync-tab-1').getAttribute('class'),'complete');
@@ -86,7 +86,8 @@ try{
  for(const expected of ['account-setup','website-setup','cloud-settings','sync-results']){await page.locator('#sync-next').click();await page.locator('#'+expected).waitFor();}
  assert.equal(await page.locator('#sync-tab-5').evaluate(n=>n.classList.contains('complete')),false);
  // An older extension cannot keep the later dots lit from previously saved settings.
- await page.evaluate(()=>{collectorState.version='1.9.2';updateSyncSteps();});
+ await page.evaluate(()=>{collectorState.version='1.9.6';updateSyncControls();});
+ assert.match(await page.locator('#install-state').textContent(),/请更新至 v1\.9\.7/);
  assert.deepEqual(await page.locator('#sync-progress li').evaluateAll(points=>points.map(p=>p.classList.contains('complete'))),[false,false,false,false,false]);await page.evaluate(()=>checkCollector());
  // Repeated status polling of an older extension must not erase a completed cloud execution.
  await page.evaluate(async()=>{window.realCollectorCommand=collectorCommand;collectorCommand=async(command,...args)=>command==='status'?{version:'1.9.2',connected:true,enabled:false,sourceResults:{}}:realCollectorCommand(command,...args);await checkCollector();setSyncStep(5);});

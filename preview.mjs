@@ -26,7 +26,7 @@ if(!database.prepare("SELECT 1 FROM settings WHERE key='planning_preview_seed'")
 const assets=env.ASSETS;
 env.ASSETS={async fetch(request){
   const response=await assets.fetch(request),path=new URL(request.url).pathname;
-  if(path==='/')return new Response((await response.text()).replace('id="app-version">v3.1.5','id="app-version">本地预览 · 规划与专注'),{headers:response.headers});
+  if(path==='/')return new Response((await response.text()).replace('id="app-version">v3.1.6','id="app-version">本地预览 · 规划与专注'),{headers:response.headers});
   if(path==='/app.js')return new Response('localStorage.setItem("ruchecklist-demo:personal","seen");sessionStorage.setItem("rucapture-focus:personal:preview-focus","1");\n'+await response.text(),{headers:response.headers});
   return response;
 }};

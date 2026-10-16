@@ -48,6 +48,7 @@ const FILE_LIMIT=10*1024*1024, STORAGE_LIMIT=100*1024*1024, CHUNK_SIZE=512*1024;
 const now = () => new Date().toISOString();
 // Keep published versions here, newest first; read receipts track only the latest.
 export const RELEASES=[
+  {version:"3.1.6",title:"同步提示与界面优化",items:["扩展 v1.9.7：关闭自动同步或删除网站后隐藏同步提示，可手动关闭并在从看板打开网站时恢复","统一卡片顶部文字对齐，优化手机换行","登录页右上角新增查看仓库入口"]},
   {version:"3.1.5",title:"演示与布局优化",items:["使用演示切换更顺畅，归档列表适配不同屏幕","统一登录页标志与作业空看板提示","更新看板支持展开查看 RUCapture 历史版本"]},
   {version:"3.1.4",title:"视图演示与快捷建轴",items:["日历、轴线分别演示，自动切换到对应视图","活动、会议、记录空看板增加添加入口；检测提示在弹窗内显示","所属轴线可直接新建，返回编辑时保留卡片草稿"]},
   {version:"3.1.3",title:"页面内确认",items:["删除、移除操作统一使用页面内确认弹窗","支持取消和 Esc 返回，删除轴线保留其中的卡片"]},

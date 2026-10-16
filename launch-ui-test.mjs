@@ -27,13 +27,17 @@ try{
   assert.deepEqual(await page.locator('.launch-eyebrow').allTextContents(),['01 / 收拢待办','02 / 校园日历','03 / 目标轴线','04 / 规划与专注']);
   assert.equal(await page.locator('.launch-question,.launch-note,.demo-caption').count(),0);
   assert.ok(!(await page.locator('#login').innerText()).includes('本阶段名额'));
-  for(const width of [1440,768,390,320]){
+  assert.equal(await page.locator('#login-form').getByText(/许可证|AGPLv3/).count(),0);
+  for(const width of [1440,1024,960,768,390,320]){
     await page.setViewportSize({width,height:1000});
     for(let i=0;i<4;i++){
       await page.locator('.launch-nav button').nth(i).click();
       await page.waitForFunction(i=>document.querySelectorAll('.launch-nav button')[i].getAttribute('aria-current')==='step',i);
       const section=page.locator('[data-launch-page]').nth(i);
       const entry=page.getByRole('button',{name:'立即体验',exact:true});assert.ok(await entry.isVisible());const entryBox=await entry.boundingBox();assert.ok(entryBox.y>=0 && entryBox.y+entryBox.height<120,'experience entry floats above every chapter');
+      const repository=page.getByRole('link',{name:'查看仓库',exact:true});assert.equal(await repository.getAttribute('href'),'https://github.com/bydtesla1609/RUCapture');assert.equal(await repository.getAttribute('target'),'_blank');
+      const repoBox=await repository.boundingBox();assert.ok(repoBox.x+repoBox.width<=entryBox.x && Math.abs(repoBox.y+repoBox.height/2-entryBox.y-entryBox.height/2)<2,`repository sits immediately left of experience at ${width}px`);
+      assert.ok(await page.locator('.landing-header').evaluate(node=>node.scrollWidth<=node.clientWidth),`header fits ${width}px`);
       assert.ok(await section.evaluate(node=>node.scrollWidth<=node.clientWidth),`chapter ${i+1} fits at ${width}`);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       const box=await section.locator('h1,h2').first().boundingBox();assert.ok(box.y>=90 && box.y<1000,`chapter heading remains below sticky header: ${i}/${width}`);
@@ -128,6 +132,25 @@ try{
     for(const [title,category,x,y] of fixtures){const task=await api('/api/tasks','POST',{title,category,due_at:'2098-03-15T09:00:00+08:00',starts_at:'2098-03-15T09:00:00+08:00',ends_at:'2098-03-15T10:00:00+08:00'});if(x)await api(`/api/quadrant/${task.id}`,'PUT',{revision:0,x:x*.6,y:y*.6});}
     await refresh();calendarSelect('2098-03-15');
   });
+  assert.equal(await page.locator('#workspace').getByText(/源码与许可证|AGPLv3/).count(),0);
+  // Reproduce the imported-card metadata row without changing any fixture records.
+  for(const width of [1440,1024,768,390,320]){
+    await page.setViewportSize({width,height:1000});
+    await page.evaluate(()=>{
+      document.getElementById('metadata-fixture')?.remove();
+      const sample={...tasks.find(task=>task.category==='作业'),id:'metadata-only',title:'虚构排版测试',source:'smartestu',source_url:'https://smartestu.cn/assignment'};
+      quadrantPositions[sample.id]={x:.6,y:-.6};const node=card(sample);node.id='metadata-fixture';node.style.maxWidth='520px';document.getElementById('board').prepend(node);
+    });
+    const fixture=page.locator('#metadata-fixture');
+    assert.ok(await fixture.evaluate(node=>{
+      const parts=[...node.querySelectorAll('.task-meta .badge,.task-meta .task-quadrant,.task-source-name,.task-original-link')].map(part=>{const range=document.createRange();range.selectNodeContents(part);return range.getBoundingClientRect();});
+      return parts.every((a,i)=>parts.slice(i+1).every(b=>Math.abs(a.top-b.top)<1 || a.bottom<=b.top || b.bottom<=a.top)) && node.querySelector('.task-meta').scrollWidth<=node.querySelector('.task-meta').clientWidth;
+    }),`metadata text shares a baseline without overflow at ${width}px`);
+    if(width===1440 || width===320)await fixture.screenshot({path:`data/screenshots/metadata-alignment-${width}.png`});
+    await fixture.evaluate(node=>node.querySelector('.task-source-name').textContent='很长的网站名称ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+    assert.ok(await fixture.evaluate(node=>node.scrollWidth<=node.clientWidth),'long source names wrap within the card');
+  }
+  await page.locator('#metadata-fixture').evaluate(node=>node.remove());await page.setViewportSize({width:1440,height:1000});
   assert.equal(await page.locator('.calendar-event .task-quadrant').count(),8);
   const first=page.locator('.calendar-event').filter({hasText:'一考试'});assert.deepEqual(await first.locator('.task-kind>span').allTextContents(),['考试','紧急且重要']);const kind=await first.locator('.badge').boundingBox(),priority=await first.locator('.task-quadrant').boundingBox();assert.ok(priority.x>kind.x+kind.width && Math.abs(priority.y+priority.height/2-kind.y-kind.height/2)<2);
   await page.screenshot({path:'data/screenshots/priority-calendar.png',fullPage:true});
@@ -138,17 +161,17 @@ try{
     if(type==='作业' || type==='记录')await page.screenshot({path:`data/screenshots/group-${type==='作业'?'homework':'records'}.png`,fullPage:true});
   }
   await page.locator('#focus-button').click();await page.locator('#focus-settings').waitFor({state:'visible'});
-  assert.deepEqual(await page.locator('#focus-tasks strong').allTextContents(),['一考试','一记录','二作业','二活动','三会议','三记录','四考试','四作业','未安排课程','未安排记录']);
+  assert.deepEqual(await page.locator('#focus-tasks strong').allTextContents(),['一考试','一记录','二作业','二活动','三会议','三记录','四考试','四作业','未安排记录']);
   assert.equal(await page.locator('#focus-tasks .task-quadrant').count(),8);
   await page.setViewportSize({width:320,height:900});assert.ok(await page.locator('#task-dialog').evaluate(node=>node.scrollWidth<=node.clientWidth));
   for(const node of await page.locator('#focus-tasks .task-quadrant').all())assert.ok(await node.evaluate(el=>el.scrollWidth<=el.clientWidth));
-  await page.setViewportSize({width:1440,height:1000});await page.locator('#focus-edit-info').click();await page.locator('.focus-choice').filter({hasText:'未安排课程'}).locator('input').check();
-  await page.locator('#focus-toggle').click();await page.waitForFunction(()=>!focusActionBusy && activeFocus()?.state==='running');assert.equal(await page.evaluate(()=>activeFocus().selected[0].category),'课程');
+  await page.setViewportSize({width:1440,height:1000});await page.locator('#focus-edit-info').click();await page.locator('.focus-choice').filter({hasText:'未安排记录'}).locator('input').check();
+  await page.locator('#focus-toggle').click();await page.waitForFunction(()=>!focusActionBusy && activeFocus()?.state==='running');assert.equal(await page.evaluate(()=>activeFocus().selected[0].category),'记录');
   await page.locator('#focus-toggle').click();await page.waitForFunction(()=>!focusActionBusy && activeFocus()?.state==='paused');await page.locator('#focus-end').click();await page.locator('#focus-end-dialog button[value=discard]').click();await page.waitForFunction(()=>!focusActionBusy && !activeFocus());
   await page.locator('#task-dialog .close-dialog').first().click();
   await page.evaluate(async()=>{const task=tasks.find(t=>t.title==='一记录');await api(`/api/tasks/${task.id}/archive`,'PATCH',{revision:task.revision,archived:true});await loadArchive();document.getElementById('archive-dialog').showModal();});
   assert.equal(await page.locator('#archive-dialog .task-quadrant').count(),0,'archive stays free of priority labels');
-  assert.deepEqual(errors,[]);console.log('Launch and priorities passed: whole-page animated wheel/keyboard/swipe navigation, inertia guard, tall-page scrolling, reduced motion, preserved login draft, responsive interactive demos, consistent headings/status dots, quadrant labels/sorting, selectable courses, 320–1440px.');
+  assert.deepEqual(errors,[]);console.log('Launch and priorities passed: whole-page animated wheel/keyboard/swipe navigation, inertia guard, tall-page scrolling, reduced motion, preserved login draft, responsive repository entry and demos, aligned metadata, consistent headings/status dots, quadrant labels/sorting, course exclusion, 320–1440px.');
 }finally{
   await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));database.close();
   assert.ok(resolve(directory).startsWith(resolve(tmpdir())+'\\'));await rm(directory,{recursive:true,force:true});
