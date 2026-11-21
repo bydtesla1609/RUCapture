@@ -1,0 +1,62 @@
+name: Supabase keep-alive
+
+# 为什么需要它：
+# Supabase Free 套餐的项目，连续 7 天没有足够的数据库活动就会被自动暂停。
+# RUCapture 的任务数据全部在 Cloudflare D1，Supabase 只负责 Auth（注册 / 登录 / 改密），
+# 所以“网站有人用”并不等于“Supabase 有数据库活动”。这个工作流每天查询一次
+# auth.users（真实 Postgres 查询），让项目稳定停留在活跃状态。
+#
+# 需要的仓库 Secrets（Settings → Secrets and variables → Actions）：
+#   SUPABASE_URL               例如 https://abcdefghijklmnop.supabase.co（结尾不要带 /）
+#   SUPABASE_SERVICE_ROLE_KEY  Supabase 控制台 → Project Settings → API → service_role
+#
+# 限制：公开仓库若连续 60 天没有任何仓库活动，GitHub 会自动停用 schedule 工作流。
+# 长期方案建议把同样的请求放进已经在运行的 Cloudflare Worker cron（见 supabase-keepalive.md）。
+
+on:
+  schedule:
+    - cron: "23 2 * * *" # 每天 UTC 02:23 = 北京时间 10:23，避开整点排队
+  workflow_dispatch: # 支持手动触发，方便第一次验证
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 查询一次 auth.users，产生活跃记录
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "::error::缺少 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY secrets"
+            exit 1
+          fi
+
+          url="${SUPABASE_URL%/}/auth/v1/admin/users?page=1&per_page=1"
+          code=$(curl -sS -o response.json -w '%{http_code}' \
+            --max-time 25 --retry 3 --retry-delay 5 --retry-all-errors \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Accept: application/json" \
+            "$url")
+
+          echo "HTTP ${code}"
+          head -c 300 response.json || true
+          echo
+
+          if [ "${code}" != "200" ]; then
+            echo "::error::Supabase 返回 ${code}；若是 540/503，说明项目已被暂停，请到 Dashboard 点 Resume project。"
+            exit 1
+          fi
+
+          echo "心跳成功：$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
