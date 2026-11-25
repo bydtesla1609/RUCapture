@@ -12,12 +12,29 @@
     if(event.data?.kind!=='campus-read-current' || !browserEnabled || !lastRead || reading)return;
     reading=true;
     try{
-      const request=lastRead,response=await originalFetch(request.url,{method:request.method,headers:request.headers,...(request.method==='POST'?{body:request.body}:{}),credentials:'same-origin',redirect:'error',signal:AbortSignal.timeout(15000)});
-      if(!response.ok)throw new Error(`列表读取失败（HTTP ${response.status}），请检查网站登录状态后重试`);
+      const request=lastRead,response=await originalFetch(request.url,{method:request.method,headers:await liveHeaders(request),...(request.method==='POST'?{body:request.body}:{}),credentials:'same-origin',redirect:'error',signal:AbortSignal.timeout(15000)});
+      if(!response.ok)throw new Error(response.status===409?`网站要求重新确认登录（HTTP 409），请刷新此页面后重试`: `列表读取失败（HTTP ${response.status}），请检查网站登录状态后重试`);
       await publish(request.url,await response.json(),request);
     }catch(error){window.postMessage({kind:'campus-assignments-v1',source,tasks:[],error:error.message},location.origin);}
     finally{reading=false;}
   });
+  // SmartEstu 的列表接口绑定 cookie-v1 会话：请求必须带 X-Auth-Protocol、
+  // 当前 X-Session-Context 和 X-CSRF-Token。抓取到的头可能缺失或已经过期，
+  // 所以重放前取一次 /api/auth/session，和云端 smartSession 的处理保持一致。
+  async function liveHeaders(request) {
+    const headers=new Headers(request.headers);
+    if(source!=="smartestu")return headers;
+    try {
+      const response=await originalFetch("https://smartestu.cn/api/auth/session",{method:"GET",headers:{"X-Auth-Protocol":"cookie-v1"},credentials:"same-origin",cache:"no-store",signal:AbortSignal.timeout(10000)});
+      if(!response.ok)return headers;
+      const session=await response.json();
+      if(typeof session?.sessionContext!=="string" || typeof session?.csrfToken!=="string")return headers;
+      headers.set("X-Auth-Protocol","cookie-v1");
+      headers.set("X-Session-Context",session.sessionContext);
+      headers.set("X-CSRF-Token",session.csrfToken);
+    } catch {}
+    return headers;
+  }
   function recipe(url,method,headers,body) {
     if(!['GET','POST'].includes(String(method || 'GET').toUpperCase()) || CampusCloudRoutes.source(new URL(url,location.href).href)!==source)return;
     return {url:new URL(url,location.href).href,method:String(method || "GET").toUpperCase(),headers:Object.fromEntries([...new Headers(headers)].filter(([name])=>CampusCloudRoutes.headers.includes(name))),body:body || ""};
